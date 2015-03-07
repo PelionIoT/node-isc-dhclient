@@ -1,0 +1,43 @@
+{
+  "name": "6lbr",
+  "version": "0.0.1",
+  "description": "6LBR node module based on contiki/6LBR",
+  "author": "Ed Hemphill <ed@wigwag.com>",
+  "main": "index.js",
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/WigWagCo/node-6lbr"
+},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install": "node-pre-gyp install --fallback-to-build"
+  },
+  "bugs": {
+  "url": "https://github.com/WigWagCo/node-6lbr/issues"
+},
+  "keywords": [
+  "contiki",
+  "network",
+  "6lbr", "rpl", "6lowpan"
+],
+  "binary": {
+       "module_name": "sixlbr_binding",
+       "module_path": "./build/Release/obj.target",
+       "host": "https://pregypbucket.s3.amazonaws.com"
+  },
+  "dependencies": {
+    "netkit": "git://github.com/WigWagCo/node-netkit#master",
+    "node-pre-gyp": "0.5.x"
+
+  },
+  "devDependencies": {
+    "aws-sdk": "~2.0.0-rc.15"
+  },
+  "bundledDependencies":["node-pre-gyp"],
+  "preferGlobal": true,
+  "private": true,
+  "license": "MIT",
+  "gypfile": true
+
+}
+  
