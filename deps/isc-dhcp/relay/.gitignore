@@ -1,1 +1,4 @@
 /.deps/
+/dhcrelay
+*.o
+/Makefile

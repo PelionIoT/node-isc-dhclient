@@ -1,0 +1,7 @@
+*.o
+/arpaname
+/genrandom
+/isc-hmac-fixup
+/Makefile
+/named-journalprint
+/nsec3hash

@@ -1,1 +1,5 @@
 /.deps/
+*.o
+*.a
+/svtest
+/Makefile

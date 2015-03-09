@@ -1,0 +1,3 @@
+*.o
+/t_rbt
+/Makefile

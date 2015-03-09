@@ -1,0 +1,3 @@
+*.o
+/lwtest
+/Makefile

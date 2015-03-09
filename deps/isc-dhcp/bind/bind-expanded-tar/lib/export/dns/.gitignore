@@ -1,0 +1,6 @@
+*.o
+/code.h
+*.a
+/Makefile
+/gen
+/timestamp

@@ -1,0 +1,4 @@
+*.o
+/cfg_test
+/Makefile
+*.sh

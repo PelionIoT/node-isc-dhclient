@@ -1,0 +1,5 @@
+*.o
+/nslookup
+/Makefile
+/host
+/dig

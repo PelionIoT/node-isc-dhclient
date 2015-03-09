@@ -1,1 +1,4 @@
 /.deps/
+*.o
+/dhcpd
+/Makefile

@@ -1,0 +1,4 @@
+*.o
+/ddns-confgen
+/Makefile
+/rndc-confgen

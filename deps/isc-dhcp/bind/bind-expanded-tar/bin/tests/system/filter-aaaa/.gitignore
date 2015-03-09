@@ -1,0 +1,3 @@
+*.o
+/filter-aaaa
+/Makefile

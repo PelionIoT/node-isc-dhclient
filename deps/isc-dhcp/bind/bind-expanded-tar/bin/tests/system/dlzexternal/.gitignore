@@ -1,0 +1,4 @@
+/dlopen
+*.o
+*.so
+/Makefile
