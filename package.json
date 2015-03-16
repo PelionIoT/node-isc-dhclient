@@ -1,24 +1,23 @@
 {
-  "name": "6lbr",
+  "name": "isc-dhclient",
   "version": "0.0.1",
-  "description": "6LBR node module based on contiki/6LBR",
+  "description": "A node.js binding for ISC's dhclient",
   "author": "Ed Hemphill <ed@wigwag.com>",
   "main": "index.js",
   "repository": {
   "type": "git",
-  "url": "https://github.com/WigWagCo/node-6lbr"
+  "url": "https://github.com/WigWagCo/node-isc-dhclient"
 },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "install": "node-pre-gyp install --fallback-to-build"
   },
   "bugs": {
-  "url": "https://github.com/WigWagCo/node-6lbr/issues"
+  "url": "https://github.com/WigWagCo/node-isc-dhclient/issues"
 },
   "keywords": [
-  "contiki",
   "network",
-  "6lbr", "rpl", "6lowpan"
+  "dhcp", "dhcpv6"
 ],
   "binary": {
        "module_name": "sixlbr_binding",

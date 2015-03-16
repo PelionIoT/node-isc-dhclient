@@ -1,8 +1,22 @@
-/* dhclient.c
-
-   DHCP Client. */
+/* dhclient-cfuncs.c
+ *
+ * node-isc-dhclient - node.js DHCP Client. */
 
 /*
+ * Copyright (c) 2015 by WigWag Inc.
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * Look for 'node-isc-dhclient' for additions / changes.
+ *
+ * This code is a modified version ISC's dhcp-4.x software.
+ * https://www.isc.org/
+ * Original license below
+ *
+ * ---------------------------------------------------------------------------
+ *
  * Copyright (c) 2004-2014 by Internet Systems Consortium, Inc. ("ISC")
  * Copyright (c) 1995-2003 by Internet Software Consortium
  *
@@ -76,7 +90,10 @@ static const char url [] =
 
 u_int16_t local_port = 0;
 u_int16_t remote_port = 0;
-int no_daemon = 0;
+
+// node-isc-dhclient change - we never want to run as a daemon
+int no_daemon = 1;
+
 struct string_list *client_env = NULL;
 int client_env_count = 0;
 int onetry = 0;
@@ -102,9 +119,7 @@ static int check_option_values(struct universe *universe, unsigned int opt,
 
 
 
-void do_dhclient(
-		//int argc, char **argv
-		)
+void do_dhclient_request()
 {
 	int fd;
 	int i;
@@ -198,9 +213,9 @@ void do_dhclient(
 			local_port = validate_port(argv[i]);
 			log_debug("binding to user-specified port %d",
 				  ntohs(local_port));
-		} else if (!strcmp(argv[i], "-d")) {
-			no_daemon = 1;
-			quiet = 0;
+//		} else if (!strcmp(argv[i], "-d")) {
+//			no_daemon = 1;
+//			quiet = 0;
 		} else if (!strcmp(argv[i], "-pf")) {
 			if (++i == argc)
 				usage();
@@ -3338,7 +3353,132 @@ void script_write_requested(client)
 	}
 }
 
+/**
+ * node-isc-dhclient addition
+ * This is the replacement function for the original script_go.
+ * Instead of calling an external script, we will pass back the information
+ * to the node/io.js thread.
+ */
 int script_go (client)
+	struct client_state *client;
+{
+	char *scriptName;
+	char *argv [2];
+	char **envp;
+	char reason [] = "REASON=NBI";
+	static char client_path [] = CLIENT_PATH;
+	int i;
+	struct string_list *sp, *next;
+	int pid, wpid, wstatus;
+
+	if (client)
+		scriptName = client -> config -> script_name;
+	else
+		scriptName = top_level_config.script_name;
+
+	envp = dmalloc (((client ? client -> envc : 2) +
+			 client_env_count + 2) * sizeof (char *), MDL);
+	if (!envp) {
+		log_error ("No memory for client script environment.");
+		return 0;
+	}
+	i = 0;
+	/* Copy out the environment specified on the command line,
+	   if any. */
+	for (sp = client_env; sp; sp = sp -> next) {
+		envp [i++] = sp -> string;
+	}
+	/* Copy out the environment specified by dhclient. */
+	if (client) {
+		for (sp = client -> env; sp; sp = sp -> next) {
+			envp [i++] = sp -> string;
+		}
+	} else {
+		envp [i++] = reason;
+	}
+	/* Set $PATH. */
+	envp [i++] = client_path;
+	envp [i] = (char *)0;
+
+	argv [0] = scriptName;
+	argv [1] = (char *)0;
+
+//	pid = fork ();
+//	if (pid < 0) {
+//		log_error ("fork: %m");
+//		wstatus = 0;
+//	} else if (pid) {
+//		do {
+//			wpid = wait (&wstatus);
+//		} while (wpid != pid && wpid > 0);
+//		if (wpid < 0) {
+//			log_error ("wait: %m");
+//			wstatus = 0;
+//		}
+//	} else {
+//		/* We don't want to pass an open file descriptor for
+//		 * dhclient.leases when executing dhclient-script.
+//		 */
+//		if (leaseFile != NULL)
+//			fclose(leaseFile);
+//		execve (scriptName, argv, envp);
+//		log_error ("execve (%s, ...): %m", scriptName);
+//		exit (0);
+//	}
+
+
+// Here is the standard data
+// the original dhclient uses to call an external script:
+//
+//	scriptName: /sbin/dhclient-script
+//	envp[0]: requested_host_name=1
+//	envp[1]: requested_domain_name_servers=1
+//	envp[2]: requested_domain_name=1
+//	envp[3]: requested_routers=1
+//	envp[4]: requested_time_offset=1
+//	envp[5]: requested_broadcast_address=1
+//	envp[6]: requested_subnet_mask=1
+//	envp[7]: new_expiry=1426542988
+//	envp[8]: new_dhcp_rebinding_time=3150
+//	envp[9]: new_broadcast_address=192.168.99.255
+//	envp[10]: new_dhcp_renewal_time=1800
+//	envp[11]: new_dhcp_server_identifier=192.168.99.1
+//	envp[12]: new_domain_name_servers=192.168.99.1
+//	envp[13]: new_dhcp_message_type=5
+//	envp[14]: new_dhcp_lease_time=3600
+//	envp[15]: new_routers=192.168.99.1
+//	envp[16]: new_subnet_mask=255.255.255.0
+//	envp[17]: new_network_number=192.168.99.0
+//	envp[18]: new_next_server=192.168.99.1
+//	envp[19]: new_ip_address=192.168.99.35
+//	envp[20]: pid=2899
+//	envp[21]: reason=BOUND
+//	envp[22]: interface=eth0
+//	envp[23]: PATH=/usr/local/sbin:/sbin:/bin:/usr/sbin:/usr/bin
+//
+// we pass this same data to node.js
+
+
+
+
+	// TODO - pass data back to node here
+
+	if (client) {
+		for (sp = client -> env; sp; sp = next) {
+			next = sp -> next;
+			dfree (sp, MDL);
+		}
+		client -> env = (struct string_list *)0;
+		client -> envc = 0;
+	}
+	dfree (envp, MDL);
+	gettimeofday(&cur_tv, NULL);
+	return (WIFEXITED (wstatus) ?
+		WEXITSTATUS (wstatus) : -WTERMSIG (wstatus));
+}
+
+
+int script_go_old (client)
 	struct client_state *client;
 {
 	char *scriptName;

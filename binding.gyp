@@ -1,10 +1,11 @@
 {
   "targets": [
     {
-      "target_name": "sixlbr_binding",
+      "target_name": "isc_dhclient",
 
       "sources": [
-        "./src/node-dhclient.cc",
+      	"./src/binding.cc",
+        "./src/dhclient-cfuncs.c",
 		"./deps/isc-dhcp/client/dhc6.c",
 		"./deps/isc-dhcp/client/clparse.c",
 		"./deps/isc-dhcp/client/dhc6.c",
@@ -75,15 +76,18 @@
 		"./deps/isc-dhcp/omapip/toisc.c",
 		"./deps/isc-dhcp/omapip/iscprint.c",
 		"./deps/isc-dhcp/omapip/isclib.c",
+		
 
 
 			
 
       ],
 
-#      "include_dirs": [
-#          "../deps/twlib/include"
-#      ],
+      "include_dirs": [
+          "deps/twlib/include",
+          "deps/isc-dhcp/bind/include",
+          "deps/isc-dhcp/includes"
+      ],
 
       "cflags": [
         "-Wall",
@@ -92,67 +96,35 @@
 #        "-E", # for debugging #defines
 
         "-I../src",
-        "-I../6lbr/examples/6lbr/platform/native",
-        "-I../6lbr/examples/6lbr",
-        "-I../6lbr/examples/6lbr/6lbr",
-        "-I../6lbr/examples/6lbr/apps/webserver",
-        "-I../6lbr/examples/6lbr/apps/udp-server",
-        "-I../6lbr/examples/6lbr/apps/coapserver",
-        "-I../6lbr/examples/6lbr-demo/apps/udp-client",
-        "-I../6lbr/examples/6lbr-demo/apps/coap",
-        "-I../6lbr/examples/6lbr/apps/node-info",
-        "-I../6lbr/apps/er-coap-13",
-        "-I../6lbr/apps/slip-cmd",
-        "-I../6lbr/apps/erbium",
-        "-I../6lbr/platform/native",
-        "-I../6lbr/core",
-        "-I../6lbr/core/dev",
-        "-I../6lbr/core/sys",
-        "-I../6lbr/core/net",
-        "-I../6lbr/core/net/mac",
-        "-I../6lbr/core/net/ip",
-        "-I../6lbr/core/net/ipv6",
-        "-I../6lbr/core/net/rpl",
-        "-I../6lbr/cpu/native",
-        "-I../deps/twlib/include",
+#        "-I../deps/isc-dhcp/bind/include",
+
 
         "-DDEBUG=1",
-
-        "-DCONTIKI_TARGET_NATIVE",
-        "-DWITH_ARGS",
-        "-DTWLIB_HAS_MOVE_SEMANTICS",  # note: requires compiler w/ C++ 11 support
-        "-DAUTOSTART_ENABLE",
-	    "-DWITH_COAP=13",
-	    "-DREST=coap_rest_implementation",
-	    "-DUIP_CONF_TCP=0",
-
+		"-DDHCPv6",
         "-D_ERRCMN_ADD_CONSTS",
-        "-DWITH_UIP6=1",
-        "-DUIP_CONF_IPV6=1",
-        "-DPROJECT_CONF_H=\"project-conf.h\"",
-        "-DUIP_CONF_IPV6_RPL=1",
-        "-DCETIC_NODE_INFO=1",
-        "-D_6LBR_NODE_MODULE=1",
 
-
-
-#        "-DCETIC_6LBR_SMARTBRIDGE=$(CETIC_6LBR_SMARTBRIDGE)",
-#        "-DCETIC_6LBR_TRANSPARENTBRIDGE=$(CETIC_6LBR_TRANSPARENTBRIDGE)",
-        "-DCETIC_6LBR_ROUTER=1",
-#        "-DCETIC_6LBR_6LR=$(CETIC_6LBR_6LR)",
-#        "-DCETIC_6LBR_ONE_ITF=1",   # I think this means one interface...
-#        "-DCETIC_6LBR_LEARN_RPL_MAC=$(CETIC_6LBR_LEARN_RPL_MAC)"
       ],
 
       "conditions": [
         [
           "OS=='linux'", {
+          "doit" : '<!(deps/install-deps.sh 2>&1 > install_deps.log)',  # doit means nothing - but this forces this script execute
           "configurations" : {
             "Release" : {
-	      "defines" : [ "linux" ]
+	      		"defines" : [ "linux" ],
+           		"ldflags" : [
+            		"-L../deps/isc-dhcp/bind/lib",
+            		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build
+            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive" 
+		        ]
             },
             "Debug" : {
-              "defines" : [ "linux", "ERRCMN_DEBUG_BUILD", "PSEUDOFS_DEBUG_BUILD" ]
+              	"defines" : [ "linux", "ERRCMN_DEBUG_BUILD", "NODE_ISCDHCP_DEBUG" ],
+           		"ldflags" : [
+            		"-L../deps/isc-dhcp/bind/lib",
+            		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build
+            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive" 
+		        ]
             }
           }
           }
@@ -168,18 +140,19 @@
           }
         ]
       ]
-    },
-    {
-      "target_name": "action_after_build",
-      "type": "none",
-      "dependencies": [ "sixlbr_binding" ],
-      "copies": [
-        {
-          "files": [ "<(PRODUCT_DIR)/sixlbr_binding.node" ],
-          "destination": "<(module_path)"
-        }
-      ]
     }
+#    ,
+#    {
+#      "target_name": "action_after_build",
+#      "type": "none",
+#      "dependencies": [ "isc_dhclient" ],
+#      "copies": [
+#        {
+#          "files": [ "<(PRODUCT_DIR)/isc_dhclient.node" ],
+#          "destination": "<(module_path)"
+#        }
+#      ]
+#    }
 
   ]
 }
