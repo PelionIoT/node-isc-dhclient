@@ -5,6 +5,7 @@
 
       "sources": [
       	"./src/binding.cc",
+      	"./src/error-common.cc",
         "./src/dhclient-cfuncs.c",
 		"./deps/isc-dhcp/client/dhc6.c",
 		"./deps/isc-dhcp/client/clparse.c",
@@ -101,7 +102,7 @@
 
         "-DDEBUG=1",
 		"-DDHCPv6",
-        "-D_ERRCMN_ADD_CONSTS",
+        "-D_ERRCMN_ADD_CONSTS"
 
       ],
 

@@ -48,8 +48,9 @@ const char *path_dhclient_pid = NULL;
 static char path_dhclient_script_array[] = _PATH_DHCLIENT_SCRIPT;
 char *path_dhclient_script = path_dhclient_script_array;
 
-/* False (default) => we write and use a pid file */
-isc_boolean_t no_pid_file = ISC_FALSE;
+/* node-isc-dhclient sets this to True X  X  X False (default) => we write and use a pid file */
+//isc_boolean_t no_pid_file = ISC_FALSE;
+isc_boolean_t no_pid_file = ISC_TRUE;
 
 int dhcp_max_agent_option_packet_length = 0;
 

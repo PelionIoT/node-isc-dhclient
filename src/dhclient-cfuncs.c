@@ -53,6 +53,8 @@
 #include <limits.h>
 #include <dns/result.h>
 
+#include "dhclient-cfuncs.h"
+
 TIME default_lease_time = 43200; /* 12 hours... */
 TIME max_lease_time = 86400; /* 24 hours... */
 
@@ -119,7 +121,8 @@ static int check_option_values(struct universe *universe, unsigned int opt,
 
 
 
-void do_dhclient_request()
+// returns 0 on now error
+int do_dhclient_request(char **err, dhclient_config *config)
 {
 	int fd;
 	int i;
@@ -134,10 +137,13 @@ void do_dhclient_request()
 	omapi_object_t *listener;
 	isc_result_t result;
 	int persist = 0;
-	int no_dhclient_conf = 0;
-	int no_dhclient_db = 0;
-	int no_dhclient_pid = 0;
-	int no_dhclient_script = 0;
+
+// node-isc-dhclient does not use any of this stuff:
+	int no_dhclient_conf = 1;
+	int no_dhclient_db = 1;
+	int no_dhclient_pid = 1;
+	int no_dhclient_script = 1;
+
 #ifdef DHCPv6
 	int local_family_set = 0;
 #endif /* DHCPv6 */
@@ -226,8 +232,8 @@ void do_dhclient_request()
 		} else if (!strcmp(argv[i], "-cf")) {
 			if (++i == argc)
 				usage();
-			path_dhclient_conf = argv[i];
-			no_dhclient_conf = 1;
+//			path_dhclient_conf = argv[i];
+//			no_dhclient_conf = 1;
 		} else if (!strcmp(argv[i], "-lf")) {
 			if (++i == argc)
 				usage();
