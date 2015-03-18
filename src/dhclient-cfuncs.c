@@ -191,181 +191,181 @@ int do_dhclient_request(char **err, dhclient_config *config)
 	dhcp_interface_shutdown_hook = dhclient_interface_shutdown_hook;
 	dhcp_interface_startup_hook = dhclient_interface_startup_hook;
 
-	for (i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "-r")) {
-			release_mode = 1;
-			no_daemon = 1;
-#ifdef DHCPv6
-		} else if (!strcmp(argv[i], "-4")) {
-			if (local_family_set && local_family != AF_INET)
-				log_fatal("Client can only do v4 or v6, not "
-					  "both.");
-			local_family_set = 1;
-			local_family = AF_INET;
-		} else if (!strcmp(argv[i], "-6")) {
-			if (local_family_set && local_family != AF_INET6)
-				log_fatal("Client can only do v4 or v6, not "
-					  "both.");
-			local_family_set = 1;
-			local_family = AF_INET6;
-#endif /* DHCPv6 */
-		} else if (!strcmp(argv[i], "-x")) { /* eXit, no release */
-			release_mode = 0;
-			no_daemon = 0;
-			exit_mode = 1;
-		} else if (!strcmp(argv[i], "-p")) {
-			if (++i == argc)
-				usage();
-			local_port = validate_port(argv[i]);
-			log_debug("binding to user-specified port %d",
-				  ntohs(local_port));
-//		} else if (!strcmp(argv[i], "-d")) {
+//	for (i = 1; i < argc; i++) {
+//		if (!strcmp(argv[i], "-r")) {
+//			release_mode = 1;
 //			no_daemon = 1;
+//#ifdef DHCPv6
+//		} else if (!strcmp(argv[i], "-4")) {
+//			if (local_family_set && local_family != AF_INET)
+//				log_fatal("Client can only do v4 or v6, not "
+//					  "both.");
+//			local_family_set = 1;
+//			local_family = AF_INET;
+//		} else if (!strcmp(argv[i], "-6")) {
+//			if (local_family_set && local_family != AF_INET6)
+//				log_fatal("Client can only do v4 or v6, not "
+//					  "both.");
+//			local_family_set = 1;
+//			local_family = AF_INET6;
+//#endif /* DHCPv6 */
+//		} else if (!strcmp(argv[i], "-x")) { /* eXit, no release */
+//			release_mode = 0;
+//			no_daemon = 0;
+//			exit_mode = 1;
+//		} else if (!strcmp(argv[i], "-p")) {
+//			if (++i == argc)
+//				usage();
+//			local_port = validate_port(argv[i]);
+//			log_debug("binding to user-specified port %d",
+//				  ntohs(local_port));
+////		} else if (!strcmp(argv[i], "-d")) {
+////			no_daemon = 1;
+////			quiet = 0;
+//		} else if (!strcmp(argv[i], "-pf")) {
+//			if (++i == argc)
+//				usage();
+//			path_dhclient_pid = argv[i];
+//			no_dhclient_pid = 1;
+//		} else if (!strcmp(argv[i], "--no-pid")) {
+//			no_pid_file = ISC_TRUE;
+//		} else if (!strcmp(argv[i], "-cf")) {
+//			if (++i == argc)
+//				usage();
+////			path_dhclient_conf = argv[i];
+////			no_dhclient_conf = 1;
+//		} else if (!strcmp(argv[i], "-lf")) {
+//			if (++i == argc)
+//				usage();
+//			path_dhclient_db = argv[i];
+//			no_dhclient_db = 1;
+//		} else if (!strcmp(argv[i], "-sf")) {
+//			if (++i == argc)
+//				usage();
+//			path_dhclient_script = argv[i];
+//			no_dhclient_script = 1;
+//		} else if (!strcmp(argv[i], "-1")) {
+//			onetry = 1;
+//		} else if (!strcmp(argv[i], "-q")) {
+//			quiet = 1;
+//		} else if (!strcmp(argv[i], "-s")) {
+//			if (++i == argc)
+//				usage();
+//			server = argv[i];
+//		} else if (!strcmp(argv[i], "-g")) {
+//			if (++i == argc)
+//				usage();
+//			mockup_relay = argv[i];
+//		} else if (!strcmp(argv[i], "-nw")) {
+//			nowait = 1;
+//		} else if (!strcmp(argv[i], "-n")) {
+//			/* do not start up any interfaces */
+//			interfaces_requested = -1;
+//		} else if (!strcmp(argv[i], "-w")) {
+//			/* do not exit if there are no broadcast interfaces. */
+//			persist = 1;
+//		} else if (!strcmp(argv[i], "-e")) {
+//			struct string_list *tmp;
+//			if (++i == argc)
+//				usage();
+//			tmp = dmalloc(strlen(argv[i]) + sizeof *tmp, MDL);
+//			if (!tmp)
+//				log_fatal("No memory for %s", argv[i]);
+//			strcpy(tmp->string, argv[i]);
+//			tmp->next = client_env;
+//			client_env = tmp;
+//			client_env_count++;
+//#ifdef DHCPv6
+//		} else if (!strcmp(argv[i], "-S")) {
+//			if (local_family_set && (local_family == AF_INET)) {
+//				usage();
+//			}
+//			local_family_set = 1;
+//			local_family = AF_INET6;
+//			wanted_ia_na = 0;
+//			stateless = 1;
+//		} else if (!strcmp(argv[i], "-N")) {
+//			if (local_family_set && (local_family == AF_INET)) {
+//				usage();
+//			}
+//			local_family_set = 1;
+//			local_family = AF_INET6;
+//			if (wanted_ia_na < 0) {
+//				wanted_ia_na = 0;
+//			}
+//			wanted_ia_na++;
+//		} else if (!strcmp(argv[i], "-T")) {
+//			if (local_family_set && (local_family == AF_INET)) {
+//				usage();
+//			}
+//			local_family_set = 1;
+//			local_family = AF_INET6;
+//			if (wanted_ia_na < 0) {
+//				wanted_ia_na = 0;
+//			}
+//			wanted_ia_ta++;
+//		} else if (!strcmp(argv[i], "-P")) {
+//			if (local_family_set && (local_family == AF_INET)) {
+//				usage();
+//			}
+//			local_family_set = 1;
+//			local_family = AF_INET6;
+//			if (wanted_ia_na < 0) {
+//				wanted_ia_na = 0;
+//			}
+//			wanted_ia_pd++;
+//		} else if (!strcmp(argv[i], "-D")) {
+//			if (local_family_set && (local_family == AF_INET)) {
+//				usage();
+//			}
+//			local_family_set = 1;
+//			local_family = AF_INET6;
+//			if (++i == argc)
+//				usage();
+//			if (!strcasecmp(argv[i], "LL")) {
+//				duid_type = DUID_LL;
+//			} else if (!strcasecmp(argv[i], "LLT")) {
+//				duid_type = DUID_LLT;
+//			} else {
+//				usage();
+//			}
+//#endif /* DHCPv6 */
+//		} else if (!strcmp(argv[i], "-v")) {
 //			quiet = 0;
-		} else if (!strcmp(argv[i], "-pf")) {
-			if (++i == argc)
-				usage();
-			path_dhclient_pid = argv[i];
-			no_dhclient_pid = 1;
-		} else if (!strcmp(argv[i], "--no-pid")) {
-			no_pid_file = ISC_TRUE;
-		} else if (!strcmp(argv[i], "-cf")) {
-			if (++i == argc)
-				usage();
-//			path_dhclient_conf = argv[i];
-//			no_dhclient_conf = 1;
-		} else if (!strcmp(argv[i], "-lf")) {
-			if (++i == argc)
-				usage();
-			path_dhclient_db = argv[i];
-			no_dhclient_db = 1;
-		} else if (!strcmp(argv[i], "-sf")) {
-			if (++i == argc)
-				usage();
-			path_dhclient_script = argv[i];
-			no_dhclient_script = 1;
-		} else if (!strcmp(argv[i], "-1")) {
-			onetry = 1;
-		} else if (!strcmp(argv[i], "-q")) {
-			quiet = 1;
-		} else if (!strcmp(argv[i], "-s")) {
-			if (++i == argc)
-				usage();
-			server = argv[i];
-		} else if (!strcmp(argv[i], "-g")) {
-			if (++i == argc)
-				usage();
-			mockup_relay = argv[i];
-		} else if (!strcmp(argv[i], "-nw")) {
-			nowait = 1;
-		} else if (!strcmp(argv[i], "-n")) {
-			/* do not start up any interfaces */
-			interfaces_requested = -1;
-		} else if (!strcmp(argv[i], "-w")) {
-			/* do not exit if there are no broadcast interfaces. */
-			persist = 1;
-		} else if (!strcmp(argv[i], "-e")) {
-			struct string_list *tmp;
-			if (++i == argc)
-				usage();
-			tmp = dmalloc(strlen(argv[i]) + sizeof *tmp, MDL);
-			if (!tmp)
-				log_fatal("No memory for %s", argv[i]);
-			strcpy(tmp->string, argv[i]);
-			tmp->next = client_env;
-			client_env = tmp;
-			client_env_count++;
-#ifdef DHCPv6
-		} else if (!strcmp(argv[i], "-S")) {
-			if (local_family_set && (local_family == AF_INET)) {
-				usage();
-			}
-			local_family_set = 1;
-			local_family = AF_INET6;
-			wanted_ia_na = 0;
-			stateless = 1;
-		} else if (!strcmp(argv[i], "-N")) {
-			if (local_family_set && (local_family == AF_INET)) {
-				usage();
-			}
-			local_family_set = 1;
-			local_family = AF_INET6;
-			if (wanted_ia_na < 0) {
-				wanted_ia_na = 0;
-			}
-			wanted_ia_na++;
-		} else if (!strcmp(argv[i], "-T")) {
-			if (local_family_set && (local_family == AF_INET)) {
-				usage();
-			}
-			local_family_set = 1;
-			local_family = AF_INET6;
-			if (wanted_ia_na < 0) {
-				wanted_ia_na = 0;
-			}
-			wanted_ia_ta++;
-		} else if (!strcmp(argv[i], "-P")) {
-			if (local_family_set && (local_family == AF_INET)) {
-				usage();
-			}
-			local_family_set = 1;
-			local_family = AF_INET6;
-			if (wanted_ia_na < 0) {
-				wanted_ia_na = 0;
-			}
-			wanted_ia_pd++;
-		} else if (!strcmp(argv[i], "-D")) {
-			if (local_family_set && (local_family == AF_INET)) {
-				usage();
-			}
-			local_family_set = 1;
-			local_family = AF_INET6;
-			if (++i == argc)
-				usage();
-			if (!strcasecmp(argv[i], "LL")) {
-				duid_type = DUID_LL;
-			} else if (!strcasecmp(argv[i], "LLT")) {
-				duid_type = DUID_LLT;
-			} else {
-				usage();
-			}
-#endif /* DHCPv6 */
-		} else if (!strcmp(argv[i], "-v")) {
-			quiet = 0;
-		} else if (!strcmp(argv[i], "--version")) {
-			const char vstring[] = "isc-dhclient-";
-			IGNORE_RET(write(STDERR_FILENO, vstring,
-					 strlen(vstring)));
-			IGNORE_RET(write(STDERR_FILENO,
-					 PACKAGE_VERSION,
-					 strlen(PACKAGE_VERSION)));
-			IGNORE_RET(write(STDERR_FILENO, "\n", 1));
-			exit(0);
-		} else if (argv[i][0] == '-') {
-		    usage();
-		} else if (interfaces_requested < 0) {
-		    usage();
-		} else {
-		    struct interface_info *tmp = NULL;
-
-		    status = interface_allocate(&tmp, MDL);
-		    if (status != ISC_R_SUCCESS)
-			log_fatal("Can't record interface %s:%s",
-				  argv[i], isc_result_totext(status));
-		    if (strlen(argv[i]) >= sizeof(tmp->name))
-			    log_fatal("%s: interface name too long (is %ld)",
-				      argv[i], (long)strlen(argv[i]));
-		    strcpy(tmp->name, argv[i]);
-		    if (interfaces) {
-			    interface_reference(&tmp->next,
-						interfaces, MDL);
-			    interface_dereference(&interfaces, MDL);
-		    }
-		    interface_reference(&interfaces, tmp, MDL);
-		    tmp->flags = INTERFACE_REQUESTED;
-		    interfaces_requested++;
-		}
-	}
+//		} else if (!strcmp(argv[i], "--version")) {
+//			const char vstring[] = "isc-dhclient-";
+//			IGNORE_RET(write(STDERR_FILENO, vstring,
+//					 strlen(vstring)));
+//			IGNORE_RET(write(STDERR_FILENO,
+//					 PACKAGE_VERSION,
+//					 strlen(PACKAGE_VERSION)));
+//			IGNORE_RET(write(STDERR_FILENO, "\n", 1));
+//			exit(0);
+//		} else if (argv[i][0] == '-') {
+//		    usage();
+//		} else if (interfaces_requested < 0) {
+//		    usage();
+//		} else {
+//		    struct interface_info *tmp = NULL;
+//
+//		    status = interface_allocate(&tmp, MDL);
+//		    if (status != ISC_R_SUCCESS)
+//			log_fatal("Can't record interface %s:%s",
+//				  argv[i], isc_result_totext(status));
+//		    if (strlen(argv[i]) >= sizeof(tmp->name))
+//			    log_fatal("%s: interface name too long (is %ld)",
+//				      argv[i], (long)strlen(argv[i]));
+//		    strcpy(tmp->name, argv[i]);
+//		    if (interfaces) {
+//			    interface_reference(&tmp->next,
+//						interfaces, MDL);
+//			    interface_dereference(&interfaces, MDL);
+//		    }
+//		    interface_reference(&interfaces, tmp, MDL);
+//		    tmp->flags = INTERFACE_REQUESTED;
+//		    interfaces_requested++;
+//		}
+//	}
 
 	if (wanted_ia_na < 0) {
 		wanted_ia_na = 1;
@@ -3372,7 +3372,7 @@ int script_go (client)
 	char *argv [2];
 	char **envp;
 	char reason [] = "REASON=NBI";
-	static char client_path [] = CLIENT_PATH;
+//	static char client_path [] = CLIENT_PATH;
 	int i;
 	struct string_list *sp, *next;
 	int pid, wpid, wstatus;
@@ -3403,7 +3403,7 @@ int script_go (client)
 		envp [i++] = reason;
 	}
 	/* Set $PATH. */
-	envp [i++] = client_path;
+//	envp [i++] = client_path;
 	envp [i] = (char *)0;
 
 	argv [0] = scriptName;
@@ -3484,6 +3484,7 @@ int script_go (client)
 }
 
 
+#ifdef SKIPME
 int script_go_old (client)
 	struct client_state *client;
 {
@@ -3564,6 +3565,7 @@ int script_go_old (client)
 	return (WIFEXITED (wstatus) ?
 		WEXITSTATUS (wstatus) : -WTERMSIG (wstatus));
 }
+#endif
 
 void client_envadd (struct client_state *client,
 		    const char *prefix, const char *name, const char *fmt, ...)

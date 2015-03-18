@@ -46,7 +46,7 @@
   (target)->Set(v8::String::New( xstr(constant) ),                                \
                 v8::String::New(#constant),                         \
                 static_cast<v8::PropertyAttribute>(                       \
-                    v8::ReadOnly|v8::DontDelete));                        \
+                    v8::ReadOnly|v8::DontDelete));
 
 // custom error codes should be above this value
 #define _ERR_CUSTOM_ERROR_CUTOFF  DHCLIENT_CUSTOM_ERROR_CUTOFF
@@ -58,7 +58,7 @@ namespace _errcmn {
 
 
 	/** NOTE: you should always pass in a string with this when using setError() */
-	const int OTHER_ERROR = SIXLBR_OTHER_ERROR;
+	const int OTHER_ERROR = DHCLIENT_OTHER_ERROR;
 	char *get_error_str(int _errno);
 	void free_error_str(char *b);
 	v8::Local<v8::Value> errno_to_JS(int _errno, const char *prefix = NULL);

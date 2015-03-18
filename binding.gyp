@@ -25,10 +25,10 @@
 		"./deps/isc-dhcp/common/conflex.c",
 		"./deps/isc-dhcp/common/ctrace.c",
 		"./deps/isc-dhcp/common/discover.c",
-		"./deps/isc-dhcp/common/dispath.c",
+		"./deps/isc-dhcp/common/dispatch.c",
 		"./deps/isc-dhcp/common/dlpi.c",
 		"./deps/isc-dhcp/common/dns.c",
-		"./deps/isc-dhcp/common/etheret.c",
+		"./deps/isc-dhcp/common/ethernet.c",
 		"./deps/isc-dhcp/common/execute.c",
 		"./deps/isc-dhcp/common/fddi.c",
 		"./deps/isc-dhcp/common/icmp.c",
@@ -63,7 +63,7 @@
 		"./deps/isc-dhcp/omapip/connection.c",
 		"./deps/isc-dhcp/omapip/errwarn.c",
 		"./deps/isc-dhcp/omapip/listener.c",
-		"./deps/isc-dhcp/omapip/dispath.c",
+		"./deps/isc-dhcp/omapip/dispatch.c",
 		"./deps/isc-dhcp/omapip/generic.c",
 		"./deps/isc-dhcp/omapip/support.c",
 		"./deps/isc-dhcp/omapip/handle.c",
@@ -87,7 +87,8 @@
       "include_dirs": [
           "deps/twlib/include",
           "deps/isc-dhcp/bind/include",
-          "deps/isc-dhcp/includes"
+          "deps/isc-dhcp/includes",
+          "deps/isc-dhcp"
       ],
 
       "cflags": [
@@ -102,7 +103,9 @@
 
         "-DDEBUG=1",
 		"-DDHCPv6",
-        "-D_ERRCMN_ADD_CONSTS"
+        "-D_ERRCMN_ADD_CONSTS",
+        "-DLOCALSTATEDIR=\"/NOVAR\""
+        
 
       ],
 
@@ -142,6 +145,7 @@
         ]
       ]
     }
+    
 #    ,
 #    {
 #      "target_name": "action_after_build",

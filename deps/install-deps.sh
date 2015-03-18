@@ -26,7 +26,7 @@ else
 	mkdir -p build
 	rm -rf ./lib ./include ./configure.log ./build.log ./install.log
 	pushd ${BIND_SRC_DIR}
-	./configure --prefix=${BIND_DIR}/build --disable-kqueue --disable-epoll --disable-devpoll --without-openssl --without-libxml2 --enable-exportlib --enable-threads=no --with-export-includedir=${BIND_DIR}/include --with-export-libdir=${BIND_DIR}/lib --with-gssapi=no > ${BIND_DIR}/configure.log
+	./configure --prefix=${BIND_DIR}/build CFLAGS="-fPIC" --disable-kqueue --disable-epoll --disable-devpoll --without-openssl --without-libxml2 --enable-exportlib --enable-threads=no --with-export-includedir=${BIND_DIR}/include --with-export-libdir=${BIND_DIR}/lib --with-gssapi=no > ${BIND_DIR}/configure.log
 	popd
 fi
 

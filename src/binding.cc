@@ -28,6 +28,9 @@
 #include <time.h>
 #include <sys/time.h>
 
+#include "dhclient-cfuncs.h"
+#include "error-common.h"
+
 using namespace v8;
 
 
@@ -179,7 +182,6 @@ if(cfield) o->Set(String::New(_k),Boolean::New(true)); else o->Set(String::New(_
 
 
 
-
 class NodeDhclient : public node::ObjectWrap {
 public:
 	enum work_code {
@@ -196,7 +198,7 @@ public:
 		NEW_LEASE       // a lease was acquired, but not necessarily a new address
 	};
 
-	static void do_workReq();
+	static void do_workReq(uv_work_t *req);
 	static void post_workReq(uv_work_t *req, int status);
 
 	class workReq {
@@ -229,7 +231,7 @@ public:
 		}
 		// complete() to be called from worker (6lbr) thread. Alerts v8 thread that this work is done.
 		void complete() {
-			uv_async_send(&async);
+//			uv_async_send(&async);
 		};
 		workReq() = delete;
 		// NOTE: workReq should be deleted from the v8 thread!!
@@ -247,14 +249,13 @@ public:
 
     static Persistent<Function> constructor;
     static Persistent<ObjectTemplate> prototype;
-    static Handle<Value> New(const Arguments& args);
 
 	static Handle<Value> SetConfig(const Arguments& args);
 	static Handle<Value> GetConfig(const Arguments& args);
 
 	static Handle<Value> RequestLease(const Arguments& args);
 
-	static Handle<Value> SixLBR::New(const Arguments& args) {
+	static Handle<Value> New(const Arguments& args) {
 		HandleScope scope;
 
 		NodeDhclient* obj = NULL;
@@ -296,8 +297,8 @@ public:
 		tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
 		// Prototype
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("stop"), FunctionTemplate::New(Stop)->GetFunction());
+//		tpl->PrototypeTemplate()->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
+//		tpl->PrototypeTemplate()->Set(String::NewSymbol("stop"), FunctionTemplate::New(Stop)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("setConfig"), FunctionTemplate::New(RequestLease)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("setConfig"), FunctionTemplate::New(SetConfig)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("getConfig"), FunctionTemplate::New(GetConfig)->GetFunction());
@@ -1793,7 +1794,7 @@ void InitAll(Handle<Object> exports, Handle<Object> module) {
 
 //	TunInterface::Init();
 //	exports->Set(String::NewSymbol("init"), FunctionTemplate::New(SixLBR::Init)->GetFunction());
-	SixLBR::Init(module);
+	NodeDhclient::Init(module);
 
 	exports->Set(String::NewSymbol("IscDhclient"), FunctionTemplate::New(NodeDhclient::New)->GetFunction());
 //	exports->Set(String::NewSymbol("readPseudo"), FunctionTemplate::New(PseudoFs::ReadPseudofile)->GetFunction());
