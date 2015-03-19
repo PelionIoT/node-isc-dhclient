@@ -183,6 +183,8 @@ if(cfield) o->Set(String::New(_k),Boolean::New(true)); else o->Set(String::New(_
 
 
 class NodeDhclient : public node::ObjectWrap {
+protected:
+	dhclient_config _config;
 public:
 	enum work_code {
 		DISCOVER_REQUEST,
@@ -246,7 +248,6 @@ public:
 
 
 
-
     static Persistent<Function> constructor;
     static Persistent<ObjectTemplate> prototype;
 
@@ -254,6 +255,27 @@ public:
 	static Handle<Value> GetConfig(const Arguments& args);
 
 	static Handle<Value> RequestLease(const Arguments& args);
+	static Handle<Value> NewClient(const Arguments& args);
+
+
+
+	static Handle<Value> NewInstance(const Arguments& args) {
+		HandleScope scope;
+		int n = args.Length();
+		Local<Object> instance;
+
+		if(args.Length() > 0) {
+			Handle<Value> argv[n];
+			for(int x=0;x<n;x++)
+				argv[x] = args[x];
+			instance = NodeDhclient::constructor->NewInstance(n, argv);
+		} else {
+			instance = NodeDhclient::constructor->NewInstance();
+		}
+
+		return scope.Close(instance);
+	}
+
 
 	static Handle<Value> New(const Arguments& args) {
 		HandleScope scope;
@@ -285,33 +307,56 @@ public:
 		    Local<Value> argv[argc] = { args[0] };
 		    return scope.Close(constructor->NewInstance(argc, argv));
 		  }
-
 	}
 
 
 
-	static void Init(Handle<Object> exports) {
+
+	static void Init() { //Handle<Object> exports) {
 		// Prepare constructor template
 		Local<FunctionTemplate> tpl = FunctionTemplate::New(New);
 		tpl->SetClassName(String::NewSymbol("IscDhclient"));
 		tpl->InstanceTemplate()->SetInternalFieldCount(1);
+		tpl->PrototypeTemplate()->SetInternalFieldCount(2);
 
 		// Prototype
 //		tpl->PrototypeTemplate()->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
 //		tpl->PrototypeTemplate()->Set(String::NewSymbol("stop"), FunctionTemplate::New(Stop)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("setConfig"), FunctionTemplate::New(RequestLease)->GetFunction());
+		tpl->PrototypeTemplate()->Set(String::NewSymbol("requestLease"), FunctionTemplate::New(RequestLease)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("setConfig"), FunctionTemplate::New(SetConfig)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("getConfig"), FunctionTemplate::New(GetConfig)->GetFunction());
 
 
 		constructor = Persistent<Function>::New(tpl->GetFunction());
-		exports->Set(String::NewSymbol("IscDhclient"), constructor);
+//		exports->Set(String::NewSymbol("IscDhclient"), constructor);
 	}
+
+
+	NodeDhclient() {
+		init_defaults_config(&_config);
+	}
+
 
 };
 
 
+Handle<Value> NodeDhclient::NewClient(const Arguments& args) {
+	HandleScope scope;
 
+	return scope.Close(NodeDhclient::NewInstance(args));
+
+}
+
+Persistent<Function> NodeDhclient::constructor;
+Persistent<ObjectTemplate> NodeDhclient::prototype;
+
+Handle<Value> NodeDhclient::SetConfig(const Arguments& args) {
+
+}
+
+Handle<Value> NodeDhclient::GetConfig(const Arguments& args) {
+
+}
 
 
 
@@ -322,13 +367,41 @@ Handle<Value> NodeDhclient::RequestLease(const Arguments& args) {
 
 	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::DISCOVER_REQUEST);
 
-
+	if(args.Length() > 0) {
+		 if(args[0]->IsFunction())
+				req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+		 else
+			 return ThrowException(Exception::TypeError(String::New("bad param: requestLease([function]) -> Need [function]")));
+	}
 
 	req->execute(uv_default_loop());
 
 	return scope.Close(Undefined());
 }
 
+
+void NodeDhclient::do_workReq(uv_work_t *req) {
+	NodeDhclient::workReq *work = (NodeDhclient::workReq *) req->data;
+
+	switch(work->cmdcode) {
+	case DISCOVER_REQUEST:
+	    {
+	    	char *errstr = NULL;
+	    	int ret = do_dhclient_request(&errstr, &work->self->_config);
+	    	if(ret != 0) {
+	    		DBG_OUT("Got error: do_dhclient_request() = %d\n",ret);
+	    	}
+	    }
+		break;
+
+	default:
+		DBG_OUT("Don't know how to do work: %d\n", work->cmdcode);
+	}
+}
+
+void NodeDhclient::post_workReq(uv_work_t *req, int status) {
+
+}
 
 
 
@@ -1794,9 +1867,10 @@ void InitAll(Handle<Object> exports, Handle<Object> module) {
 
 //	TunInterface::Init();
 //	exports->Set(String::NewSymbol("init"), FunctionTemplate::New(SixLBR::Init)->GetFunction());
-	NodeDhclient::Init(module);
+	NodeDhclient::Init();
 
-	exports->Set(String::NewSymbol("IscDhclient"), FunctionTemplate::New(NodeDhclient::New)->GetFunction());
+//	exports->Set(String::NewSymbol("IscDhclient"), FunctionTemplate::New(NodeDhclient::New)->GetFunction());
+	exports->Set(String::NewSymbol("newClient"), FunctionTemplate::New(NodeDhclient::NewClient)->GetFunction());
 //	exports->Set(String::NewSymbol("readPseudo"), FunctionTemplate::New(PseudoFs::ReadPseudofile)->GetFunction());
 //	exports->Set(String::NewSymbol("writePseudo"), FunctionTemplate::New(PseudoFs::WritePseudofile)->GetFunction());
 

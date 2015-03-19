@@ -16,10 +16,14 @@ BIND_DIR=${DEPS_DIR}/isc-dhcp/bind
 
 BIND_SRC_DIR=${DEPS_DIR}/isc-dhcp/bind/bind-expanded-tar
 
+if [ "$1" == "rebuild" ]; then
+	REBUILD=1
+fi 
+
 touch $LOG
 pushd $BIND_DIR
 
-if [ -e ${BIND_SRC_DIR}/Makefile ]; then                  
+if [ -e ${BIND_SRC_DIR}/Makefile ] && [ -z $REBUILD ]; then                  # ;
 	echo "Bind export libraries already configured"   
 else                                                       
 	echo "Configuring BIND Export libraries for DHCP."
@@ -30,9 +34,10 @@ else
 	popd
 fi
 
-if [ -e libs ]; then
+if [ -e "${DEPS_DIR}/isc-dhcp/bind/lib/libdns.a" ] && [ -z $REBUILD ]; then
 	echo "Bind libraries already built."
 else
+	echo "Building libraries"
 	pushd ${BIND_SRC_DIR}
 	make
 	make install

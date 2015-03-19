@@ -120,6 +120,24 @@ static int check_option_values(struct universe *universe, unsigned int opt,
 			       const char *ptr, size_t len);
 
 
+void init_defaults_config(dhclient_config *config) {
+	int n = 0;
+	config->local_family = AF_INET;  // = AF_INET  or  AF_INET6
+	config->local_port = 0;    // = 0
+	config->server = NULL;      // = NULL   the DHCP server address to use (instead of broadcast)
+	for(n=0;n<DHCLIENT_MAX_INTERFACES;n++)
+		config->interfaces[n] = NULL;
+	// IPv6 stuff:
+	config->wanted_ia_na = -1;  // = -1   see dhclient option: -T and -P  and -N
+	config->wanted_ia_ta = 0;  // = 0    see dhclient option: -T
+	config->wanted_ia_pd = 0;  // = 0    see dhclient option: -P
+	config->stateless = 0;     // = 0    see dhclient option: -S
+	config->duid_type = 0;     // = 0    see dhclient option: -D
+	config->quiet = 0;         // = 0    if 1 be chatty on stdout, only shoudl be used for debugging
+
+	config->exit_mode = 0;     // = 0 these are for dhclient process related stuff - probably can remove them
+	config->release_mode = 0;  // = 0
+}
 
 // returns 0 on now error
 int do_dhclient_request(char **err, dhclient_config *config)
