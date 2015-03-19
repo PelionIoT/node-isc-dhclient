@@ -350,12 +350,116 @@ Handle<Value> NodeDhclient::NewClient(const Arguments& args) {
 Persistent<Function> NodeDhclient::constructor;
 Persistent<ObjectTemplate> NodeDhclient::prototype;
 
-Handle<Value> NodeDhclient::SetConfig(const Arguments& args) {
 
+//typedef struct dhclient_config_t {
+//	int local_family;  // = AF_INET  or  AF_INET6
+//	int local_port;    // = 0
+//	char *server;      // = NULL   the DHCP server address to use (instead of broadcast)
+//	char *interfaces[DHCLIENT_MAX_INTERFACES];
+//	// IPv6 stuff:
+//	int wanted_ia_na;  // = -1   see dhclient option: -T and -P  and -N
+//	int wanted_ia_ta;  // = 0    see dhclient option: -T
+//	int wanted_ia_pd;  // = 0    see dhclient option: -P
+//	int stateless;     // = 0    see dhclient option: -S
+//	int duid_type;     // = 0    see dhclient option: -D
+//	int quiet;         // = 0    if 1 be chatty on stdout, only shoudl be used for debugging
+//
+//	int exit_mode;     // = 0 these are for dhclient process related stuff - probably can remove them
+//	int release_mode;  // = 0
+//} dhclient_config;
+
+
+
+Handle<Value> NodeDhclient::SetConfig(const Arguments& args) {
+	HandleScope scope;
+
+	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+
+	if(args.Length() > 0 && args[0]->IsObject()) {
+		Local<Object> o = args[0]->ToObject();
+		Local<Value> v;
+		V8_IFEXIST_TO_INT_CAST("local_family",obj->_config.local_family,v,o,int);
+		V8_IFEXIST_TO_INT_CAST("local_port",obj->_config.local_port,v,o,int);
+		V8_IFEXIST_TO_DYN_CSTR("server",obj->_config.server,v,o);
+		{ v = o->Get(String::New("interfaces"));
+			if(!v->IsUndefined() && v->IsArray()) {
+				Handle<Array> a =  v8::Handle<v8::Array>::Cast(v);;
+				int n = a->Length();
+				if(n > DHCLIENT_MAX_INTERFACES) {
+					return ThrowException(Exception::TypeError(String::New("Too many interfaces listed.")));
+				}
+				for(int x=0;x<DHCLIENT_MAX_INTERFACES;x++) // clear out old interface list
+					if(obj->_config.interfaces[x]) {
+						free(obj->_config.interfaces[x]);
+						obj->_config.interfaces[x] = NULL;
+					}
+				for(int x=0;x<n;x++) {
+					{ 	Local<Value> s;
+						s = a->Get(x);
+						if(!s->IsUndefined() && s->IsString()) {
+							v8::String::Utf8Value v8str(s);
+							obj->_config.interfaces[x] = strdup(v8str.operator *());
+						}
+					}
+				}
+			} else {
+				DBG_OUT("Warning - no interfaces configured.");
+			}
+		}
+
+		V8_IFEXIST_TO_INT_CAST("wanted_ia_na",obj->_config.wanted_ia_na,v,o,int);
+		V8_IFEXIST_TO_INT_CAST("wanted_ia_ta",obj->_config.wanted_ia_ta,v,o,int);
+		V8_IFEXIST_TO_INT_CAST("wanted_ia_pd",obj->_config.wanted_ia_pd,v,o,int);
+		V8_IFEXIST_TO_INT_CAST("stateless",obj->_config.stateless,v,o,int);
+		V8_IFEXIST_TO_INT_CAST("duid_type",obj->_config.duid_type,v,o,int);
+		V8_IFEXIST_TO_INT_CAST("quiet",obj->_config.quiet,v,o,int);
+		V8_IFEXIST_TO_INT_CAST("exit_mode",obj->_config.exit_mode,v,o,int);
+		V8_IFEXIST_TO_INT_CAST("release_mode",obj->_config.release_mode,v,o,int);
+
+	} else {
+		return ThrowException(Exception::TypeError(String::New("bad param: setConfig([object])")));
+	}
+
+	return scope.Close(Undefined());
 }
 
 Handle<Value> NodeDhclient::GetConfig(const Arguments& args) {
+	HandleScope scope;
 
+	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+
+	Local<Object> o = Object::New();
+
+	INT32_TO_V8("local_family",obj->_config.local_family,o);
+	INT32_TO_V8("local_port",obj->_config.local_port,o);
+	CSTR_TO_V8STR("server",obj->_config.server,o);
+	{
+		int n = 0;
+		while(n < DHCLIENT_MAX_INTERFACES) {
+			if(!obj->_config.interfaces[n])
+				break;
+			n++;
+		}
+		if(n > 0) {
+			Local<Object> ar = Array::New(n);
+			for(int x=0;x<n;x++) {
+				ar->Set(x,String::New(obj->_config.interfaces[x],strlen(obj->_config.interfaces[x])));			}
+			o->Set(String::New("interfaces"),ar);
+		} else {
+			o->Set(String::New("interfaces"),Null());
+		}
+	}
+
+	INT32_TO_V8("wanted_ia_na",obj->_config.wanted_ia_na,o);
+	INT32_TO_V8("wanted_ia_ta",obj->_config.wanted_ia_ta,o);
+	INT32_TO_V8("wanted_ia_pd",obj->_config.wanted_ia_pd,o);
+	INT32_TO_V8("stateless",obj->_config.stateless,o);
+	INT32_TO_V8("duid_type",obj->_config.duid_type,o);
+	INT32_TO_V8("quiet",obj->_config.quiet,o);
+	INT32_TO_V8("exit_mode",obj->_config.exit_mode,o);
+	INT32_TO_V8("release_mode",obj->_config.release_mode,o);
+
+	return scope.Close(o);
 }
 
 
