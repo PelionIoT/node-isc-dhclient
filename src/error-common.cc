@@ -28,7 +28,10 @@
 
 
 #include <string.h>
-extern char *strdup(const char *s);
+
+extern "C" {
+	extern char *strdup(const char *s);
+}
 
 namespace _errcmn {
 
@@ -483,29 +486,32 @@ custom_errno custom_errs[] = {
 		return retobj;
 	}
 
+
 	v8::Handle<v8::Value> err_ev_to_JS(err_ev &e, const char *prefix) {
-		v8::HandleScope scope;
-	//		v8::Local<v8::Object> retobj = v8::Object::New();
-		v8::Local<v8::Value> retobj = v8::Local<v8::Primitive>::New(v8::Undefined());
+			v8::HandleScope scope;
+		//		v8::Local<v8::Object> retobj = v8::Object::New();
+			v8::Local<v8::Value> retobj = v8::Local<v8::Primitive>::New(v8::Undefined());
 
-		if(e.hasErr()) {
-			char *temp = NULL;
-			if(prefix && e.errstr) {
-				int len = strlen(prefix)+strlen(e.errstr)+2;
-				temp = (char *) malloc(len);
-				memset(temp,0,len);
-				strcpy(temp, prefix);
-				strcat(temp, e.errstr);
-	//				retobj->Set(v8::String::New("message"), v8::String::New(temp));
-				retobj = v8::Exception::Error(v8::String::New(temp));
-				free(temp);
+			if(e.hasErr()) {
+				char *temp = NULL;
+				if(e.errstr) {
+					int len = strlen(e.errstr)+1;
+					if(prefix) len += strlen(prefix)+1;
+					temp = (char *) malloc(len);
+					memset(temp,0,len);
+					if(prefix) {
+						strcpy(temp, prefix);
+						strcat(temp, e.errstr);
+					} else
+						strcpy(temp, e.errstr);
+					retobj = v8::Exception::Error(v8::String::New(temp));
+					free(temp);
+				}
+				else retobj = v8::Exception::Error(v8::String::New("Error"));
+				retobj->ToObject()->Set(v8::String::New("errno"), v8::Integer::New(e._errno));
 			}
-			else retobj = v8::Exception::Error(v8::String::New("Error"));
-			retobj->ToObject()->Set(v8::String::New("errno"), v8::Integer::New(e._errno));
+			return scope.Close(retobj);
 		}
-		return scope.Close(retobj);
-	}
-
 
 }
 

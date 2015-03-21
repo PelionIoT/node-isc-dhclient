@@ -139,11 +139,15 @@ void init_defaults_config(dhclient_config *config) {
 	config->release_mode = 0;  // = 0
 }
 
+
+#define DHCLIENT_MAX_ERR_STR 100
+
 // returns 0 on now error
 int do_dhclient_request(char **err, dhclient_config *config)
 {
 	int fd;
 	int i;
+	char errout_str[DHCLIENT_MAX_ERR_STR];
 	struct interface_info *ip;
 	struct client_state *client;
 	unsigned seed;
@@ -370,9 +374,10 @@ int do_dhclient_request(char **err, dhclient_config *config)
 //		    if (status != ISC_R_SUCCESS)
 //			log_fatal("Can't record interface %s:%s",
 //				  argv[i], isc_result_totext(status));
-//		    if (strlen(argv[i]) >= sizeof(tmp->name))
+//		    if (strlen(argv[i]) >= sizeof(tmp->name)) {
 //			    log_fatal("%s: interface name too long (is %ld)",
 //				      argv[i], (long)strlen(argv[i]));
+//		    }
 //		    strcpy(tmp->name, argv[i]);
 //		    if (interfaces) {
 //			    interface_reference(&tmp->next,
@@ -384,6 +389,34 @@ int do_dhclient_request(char **err, dhclient_config *config)
 //		    interfaces_requested++;
 //		}
 //	}
+
+	int n = 0;
+	for(n = 0; n<DHCLIENT_MAX_INTERFACES;n++) {
+		if(!config->interfaces[n]) break;
+	    struct interface_info *tmp = NULL;
+
+	    status = interface_allocate(&tmp, MDL);
+	    if (status != ISC_R_SUCCESS)
+	    	log_fatal("Can't record interface %s:%s",
+			  config->interfaces[n], isc_result_totext(status));
+	    if (strlen(config->interfaces[n]) >= sizeof(tmp->name)) {
+		    log_fatal("%s: interface name too long (is %ld)",
+		    		config->interfaces[n], (long)strlen(config->interfaces[n]));
+	    	snprintf(errout_str,DHCLIENT_MAX_ERR_STR,"%s: interface name too long (is %ld)",
+	    			config->interfaces[n], (long)strlen(config->interfaces[n]));
+	    	return DHCLIENT_INVALID_CONFIG;
+		}
+	    strcpy(tmp->name, config->interfaces[n]);
+	    if (interfaces) {
+		    interface_reference(&tmp->next,
+					interfaces, MDL);
+		    interface_dereference(&interfaces, MDL);
+	    }
+	    interface_reference(&interfaces, tmp, MDL);
+	    tmp->flags = INTERFACE_REQUESTED;
+	    interfaces_requested++;
+	}
+
 
 	if (wanted_ia_na < 0) {
 		wanted_ia_na = 1;
@@ -568,7 +601,9 @@ int do_dhclient_request(char **err, dhclient_config *config)
 		if (!persist) {
 			/* Nothing more to do. */
 			log_info("No broadcast interfaces found - exiting.");
-			exit(0);
+	    	snprintf(errout_str,DHCLIENT_MAX_ERR_STR,"No broadcast interfaces found - exiting.");
+	    	return DHCLIENT_INVALID_CONFIG;
+//			exit(0);
 		}
 	} else if (!release_mode && !exit_mode) {
 		/* Call the script with the list of interfaces. */

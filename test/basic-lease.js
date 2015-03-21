@@ -8,6 +8,9 @@ console.dir(client.__proto__);
 
 var conf = client.getConfig();
 
+conf.interfaces = [];
+conf.interfaces.push("eth0");
+
 console.log("conf: " + util.inspect(conf));
 
 client.requestLease(function(err,results){

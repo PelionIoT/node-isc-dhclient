@@ -210,7 +210,7 @@ public:
 		bool ref;
 	public:
 		work_code cmdcode;
-		int _errno;     // the errno that happened on read if an error occurred.
+		_errcmn::err_ev err;
 		v8::Persistent<Function> onCompleteCB;
 		v8::Persistent<Object> buffer; // Buffer object passed in
 		uint32_t uint32t_data;
@@ -222,7 +222,7 @@ public:
 		int retries;
 		int timeout;
 
-		workReq(NodeDhclient *i, work_code c) : ref(false), cmdcode(c),_errno(0),
+		workReq(NodeDhclient *i, work_code c) : ref(false), cmdcode(c), err(),
 				onCompleteCB(), buffer(),
 				_backing(NULL), freeBacking(false), len(0), self(i), _reqSize(0),
 				retries(DEFAULT_RETRIES), timeout(TIMEOUT_FOR_RETRY) {
@@ -494,6 +494,8 @@ void NodeDhclient::do_workReq(uv_work_t *req) {
 	    	int ret = do_dhclient_request(&errstr, &work->self->_config);
 	    	if(ret != 0) {
 	    		DBG_OUT("Got error: do_dhclient_request() = %d\n",ret);
+	    		work->err.setError(ret, errstr);
+	    		if(errstr) ::free(errstr);
 	    	}
 	    }
 		break;
@@ -504,7 +506,21 @@ void NodeDhclient::do_workReq(uv_work_t *req) {
 }
 
 void NodeDhclient::post_workReq(uv_work_t *req, int status) {
+	NodeDhclient::workReq *work = (NodeDhclient::workReq *) req->data;
 
+	const unsigned argc = 2;
+	Local<Value> argv[argc];
+
+	if(!work->onCompleteCB.IsEmpty()) {
+		if(work->err.hasErr()) {
+			argv[0] =  Local<Value>::New(Null());
+			argv[1] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+			work->onCompleteCB->Call(Context::GetCurrent()->Global(),2,argv);
+		} else {
+			// TODO make object to pass in...
+			work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+		}
+	}
 }
 
 
