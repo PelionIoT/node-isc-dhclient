@@ -18,13 +18,10 @@
 #include <errno.h>
 #include <string.h>
 
-#include <utility>
-
 #include <TW/tw_utils.h>
 #include <TW/tw_alloc.h>
 #include <TW/tw_sema.h>
 #include <TW/tw_circular.h>
-
 
 void *print_message_function( void *ptr );
 
@@ -77,13 +74,8 @@ class data {
 public:
 	int x;
 	data() : x(0) {}
-	data(data &) = delete;
-	data(data &&o) : x(o.x) { o.x = 0; }
-	data& operator=(data&& other) {
-	     x = other.x;
-	     other.x = 0;
-	     return *this;
-	}
+	data(data &o) : x(o.x) {}
+
 };
 
 void *producer( void *ptr ) {
@@ -97,9 +89,7 @@ void *producer( void *ptr ) {
 		x--;
 		printf(">>> Producer %d: adding %d\n\n", inf->threadnum, val);
 		D.x = val;
-		Q->addMv(D);
-		if(val % 5 == 0)
-			sleep(1);  // obviously not good in the real world, but for test case
+		Q->add(D);
 	}
 }
 
@@ -111,20 +101,25 @@ void *consumer( void *ptr ) {
 	int tc = 0;
 	data D;
 	while(x > 0) {
-		while(1) {
-			if(Q->removeMvOrBlock(D, 10)) {
-				cnt++;
-				printf("<<< Consumer %d: removed %d\n\n",inf->threadnum, D.x);
-				TOTAL--;
-				x--;
-				break;
-			} else {
-				printf(" * ");
-			}
+		// this also works...
+//		totalMutex->acquire();
+//		printf("HERE\n");
+//		if(TOTAL < 1) {
+//			totalMutex->release();
+//			break;
+//		}
 
+		if(Q->removeOrBlock(D)) {
+			cnt++;
+			printf("<<< Consumer %d: removed %d (x=%d)\n\n",inf->threadnum, D.x, x);
+			TOTAL--;
+			x--;
+		} else {
+			printf("<<< Consumer %d: failed remove (x=%d) \n\n", inf->threadnum, x);
 		}
+//		totalMutex->release();
 	}
-	printf("Consumer %d done!!!\n", inf->threadnum);
+	printf("Consumer %d done  (cnt=%d) !!!\n", inf->threadnum, cnt);
 	OUTPUT[inf->threadnum] = cnt;
 }
 
@@ -172,6 +167,26 @@ int main()
      /* Wait till threads are complete before main continues. Unless we  */
      /* wait we run the risk of executing an exit which will terminate   */
      /* the process and all threads before the threads have completed.   */
+
+     // unblock removers a few times. You might need to change these time values
+     // based on your arch or threading model.
+ 	printf("!!! UnblockAll()...\n");
+     theQ.unblockAllRemovers();
+     usleep(100);
+  	printf("!!! UnblockAll()...\n");
+     theQ.unblockAllRemovers();
+     usleep(100);
+  	printf("!!! UnblockAll()...\n");
+     theQ.unblockAllRemovers();
+     usleep(100);
+  	printf("!!! UnblockAll()...\n");
+     theQ.unblockAllRemovers();
+     usleep(300);
+  	printf("!!! UnblockAll()...\n");
+     theQ.unblockAllRemovers();
+     usleep(500);
+  	printf("!!! UnblockAll()...\n");
+     theQ.unblockAllRemovers();
 
 
      for (int x=0;x<CONSUMER_THREADS;x++) {

@@ -104,6 +104,7 @@ public:
 	void clear(); // remove all nodes (does not delete T)
 //	void unblock();  // unblock 1 blocking call
 	void unblockAll(); // unblock all blocking calls
+	void unblockAllRemovers();
 	void disable();
 	void enable();
 
@@ -533,7 +534,7 @@ bool tw_safeCircular<T,ALLOC>::removeOrBlock( T &fill ) {
 	} else {
 		TW_CIRCULAR_DBG_OUT("  ...removeOrBlock(%d) waitForAcquirers", remain());
 		int r = sema.waitForAcquirersKeepLock(false); // unlocks while waiting for acquire
-		if(!r) {
+		if(r == 0) {
 			TW_CIRCULAR_DBG_OUT("  ...waitForAcquirers complete. remain = %d", remain());
 			sema.releaseWithoutLock();
 			nextOut = nextNextOut();
@@ -568,7 +569,7 @@ bool tw_safeCircular<T,ALLOC>::removeOrBlock( T &fill, const int64_t usec_wait )
 	} else {
 		TW_CIRCULAR_DBG_OUT("  ...removeOrBlock(%d) waitForAcquirers", remain());
 		int r = sema.waitForAcquirersKeepLock(usec_wait, false); // unlocks while waiting for acquire
-		if(!r) {
+		if(r == 0) {
 			TW_CIRCULAR_DBG_OUT("  ...waitForAcquirers complete. remain = %d", remain());
 			sema.releaseWithoutLock();
 			nextOut = nextNextOut();
@@ -605,7 +606,7 @@ bool tw_safeCircular<T,ALLOC>::removeMvOrBlock( T &fill ) {
 	} else {
 		TW_CIRCULAR_DBG_OUT("  ...removeOrBlock(%d) waitForAcquirers", remain());
 		int r = sema.waitForAcquirersKeepLock(false); // unlocks while waiting for acquire
-		if(!r) {
+		if(r == 0) {
 			TW_CIRCULAR_DBG_OUT("  ...waitForAcquirers complete. remain = %d", remain());
 			sema.releaseWithoutLock();
 			nextOut = nextNextOut();
@@ -640,7 +641,7 @@ bool tw_safeCircular<T,ALLOC>::removeMvOrBlock( T &fill, const int64_t usec_wait
 	} else {
 		TW_CIRCULAR_DBG_OUT("  ...removeOrBlock(%d) waitForAcquirers", remain());
 		int r = sema.waitForAcquirersKeepLock(usec_wait, false); // unlocks while waiting for acquire
-		if(!r) {
+		if(r == 0) {
 			TW_CIRCULAR_DBG_OUT("  ...waitForAcquirers complete. remain = %d", remain());
 			sema.releaseWithoutLock();
 			nextOut = nextNextOut();
@@ -688,11 +689,22 @@ void tw_safeCircular<T,ALLOC>::clear() { // delete all remaining links (and hope
 	sema.releaseSemaLock();
 }
 
+/**
+ * Unblocks everything. NOTE: The queue is not safe to use after calling this, and should be discarded.
+ * Use unblockAllRemovers() to safely unblock all removal calls.
+ */
 template <class T,class ALLOC>
 void tw_safeCircular<T,ALLOC>::unblockAll() {
 	sema.releaseAll();
 }
 
+/**
+ * Unblocks all calls involving element removal. Those calls will fail gracefully with a false.
+ */
+template <class T,class ALLOC>
+void tw_safeCircular<T,ALLOC>::unblockAllRemovers() {
+	sema.releaseAllAcquireLocks();
+}
 
 
 template <class T,class ALLOC>
