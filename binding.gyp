@@ -97,21 +97,20 @@
         "-std=c++11",
         "-fPIC",
 #        "-E", # for debugging #defines
-
         "-I../src",
 #        "-I../deps/isc-dhcp/bind/include",
 
 
-        "-DDEBUG=1",
-		"-DDHCPv6",
+		"-DDHCPv6=1",
         "-D_ERRCMN_ADD_CONSTS",
-        "-DLOCALSTATEDIR=\"/NOVAR\""
+        "-DLOCALSTATEDIR=\"/NOVAR\"",
+        # out of config.h
         
 
       ],
 
       "conditions": [
-        [
+        [ 
           "OS=='linux'", {
           "doit" : '<!(deps/install-deps.sh 2>&1 > install_deps.log)',  # doit means nothing - but this forces this script execute
           "configurations" : {
@@ -125,6 +124,9 @@
             },
             "Debug" : {
               	"defines" : [ "linux", "ERRCMN_DEBUG_BUILD", "NODE_ISCDHCP_DEBUG" ],
+              	"cflags" : [
+              	    "-DDEBUG=1"
+              	],
            		"ldflags" : [
             		"-L../deps/isc-dhcp/bind/lib",
             		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build

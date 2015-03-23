@@ -7,9 +7,11 @@
  */
 
 // inline insertion of extra constants
-//#include "dhclient-cfuncs-errors-inl.h"
+#include "dhclient-cfuncs-errors.h"
 
-//_ERRCMN_DEFINE_CONSTANT_WREV(target, _PARTIAL_WRITE);
+// codes defined in: dhclient-cfuncs-errors.h
 
-
-
+custom_errno custom_errs[] = {
+		{ "Invalid dhclient config.", DHCLIENT_INVALID_CONFIG },
+		{ "General dhclient exec error.", DHCLIENT_EXEC_ERROR }
+};

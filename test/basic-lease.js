@@ -11,6 +11,8 @@ var conf = client.getConfig();
 conf.interfaces = [];
 conf.interfaces.push("eth0");
 
+client.setConfig(conf);
+
 console.log("conf: " + util.inspect(conf));
 
 client.requestLease(function(err,results){

@@ -65,7 +65,7 @@ static char path_dhclient_script_array[] = _PATH_DHCLIENT_SCRIPT;
 char *path_dhclient_script = path_dhclient_script_array;
 
 /* False (default) => we write and use a pid file */
-isc_boolean_t no_pid_file = ISC_FALSE;
+isc_boolean_t no_pid_file = ISC_TRUE;
 
 int dhcp_max_agent_option_packet_length = 0;
 
@@ -99,7 +99,7 @@ int no_daemon = 1;
 struct string_list *client_env = NULL;
 int client_env_count = 0;
 int onetry = 0;
-int quiet = 1;
+int quiet = 0;
 int nowait = 0;
 int stateless = 0;
 int wanted_ia_na = -1;		/* the absolute value is the real one. */
@@ -139,15 +139,23 @@ void init_defaults_config(dhclient_config *config) {
 	config->release_mode = 0;  // = 0
 }
 
+const char *MEM_FAILURE_STR = "Malloc failure\n";
+
+#define ERROR_OUT(s,...) fprintf(stderr, "**ERROR** " s, ##__VA_ARGS__ )
 
 #define DHCLIENT_MAX_ERR_STR 100
+#define SET_DHCLIENT_ERROR_STR(s,...) { char *_err = (char *) malloc(DHCLIENT_MAX_ERR_STR); \
+		if(_err) { \
+	        snprintf(_err,DHCLIENT_MAX_ERR_STR, s, ##__VA_ARGS__ ); \
+            *err = _err; \
+	    } else { fprintf(stderr, MEM_FAILURE_STR); } }
 
 // returns 0 on now error
 int do_dhclient_request(char **err, dhclient_config *config)
 {
 	int fd;
 	int i;
-	char errout_str[DHCLIENT_MAX_ERR_STR];
+//	char errout_str[DHCLIENT_MAX_ERR_STR];
 	struct interface_info *ip;
 	struct client_state *client;
 	unsigned seed;
@@ -402,8 +410,9 @@ int do_dhclient_request(char **err, dhclient_config *config)
 	    if (strlen(config->interfaces[n]) >= sizeof(tmp->name)) {
 		    log_fatal("%s: interface name too long (is %ld)",
 		    		config->interfaces[n], (long)strlen(config->interfaces[n]));
-	    	snprintf(errout_str,DHCLIENT_MAX_ERR_STR,"%s: interface name too long (is %ld)",
+		    SET_DHCLIENT_ERROR_STR("%s: interface name too long (is %ld)",
 	    			config->interfaces[n], (long)strlen(config->interfaces[n]));
+//	    	snprintf(errout_str,DHCLIENT_MAX_ERR_STR,);
 	    	return DHCLIENT_INVALID_CONFIG;
 		}
 	    strcpy(tmp->name, config->interfaces[n]);
@@ -601,7 +610,9 @@ int do_dhclient_request(char **err, dhclient_config *config)
 		if (!persist) {
 			/* Nothing more to do. */
 			log_info("No broadcast interfaces found - exiting.");
-	    	snprintf(errout_str,DHCLIENT_MAX_ERR_STR,"No broadcast interfaces found - exiting.");
+			SET_DHCLIENT_ERROR_STR("No broadcast interfaces found - exiting.");
+//			snprintf(errout_str,DHCLIENT_MAX_ERR_STR,"No broadcast interfaces found - exiting.");
+//	    	*err = errout_str;
 	    	return DHCLIENT_INVALID_CONFIG;
 //			exit(0);
 		}
@@ -1666,6 +1677,11 @@ void dhcpoffer (packet)
 		log_info ("%s: packet_to_lease failed.", obuf);
 		return;
 	}
+
+	// node-isc-dhclient
+#if defined (DEBUG)
+	sprintf (obuf, "got lease for: %s\n", piaddr (lease->address) );
+#endif
 
 	/* If this lease was acquired through a BOOTREPLY, record that
 	   fact. */
@@ -3532,8 +3548,9 @@ int script_go (client)
 	}
 	dfree (envp, MDL);
 	gettimeofday(&cur_tv, NULL);
-	return (WIFEXITED (wstatus) ?
-		WEXITSTATUS (wstatus) : -WTERMSIG (wstatus));
+//	return (WIFEXITED (wstatus) ?
+//		WEXITSTATUS (wstatus) : -WTERMSIG (wstatus));
+	return 0; // success
 }
 
 

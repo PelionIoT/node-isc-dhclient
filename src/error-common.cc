@@ -35,12 +35,21 @@ extern "C" {
 
 namespace _errcmn {
 
+typedef struct {
+	const char *label;
+	const int code;
+} custom_errno;
 
-void DefineConstants(v8::Handle<v8::Object> target) {
 
 #ifdef _ERRCMN_ADD_CONSTS
 #include "errcmn_inl.h"
+#else
+	custom_errno custom_errs[] = { };
 #endif
+
+
+void DefineConstants(v8::Handle<v8::Object> target) {
+
 
 
 #ifdef E2BIG
@@ -361,15 +370,7 @@ _ERRCMN_DEFINE_CONSTANT_WREV(target, EXDEV);
 
 }
 
-typedef struct {
-	const char *label;
-	const int code;
-} custom_errno;
 
-
-custom_errno custom_errs[] = {
-		{ "Invalid dhclient config.", DHCLIENT_INVALID_CONFIG }
-};
 
 
 	char *get_custom_err_str(int _errno) {

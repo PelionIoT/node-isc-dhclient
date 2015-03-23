@@ -31,6 +31,11 @@
 #include "dhclient-cfuncs.h"
 #include "error-common.h"
 
+#include <TW/tw_fifo.h>
+#include <TW/tw_circular.h>
+#include <TW/tw_khash.h>
+typedef Allocator<Alloc_Std> DhclientAllocator;
+
 using namespace v8;
 
 
@@ -179,20 +184,18 @@ if(cfield) o->Set(String::New(_k),Boolean::New(true)); else o->Set(String::New(_
 
 
 
-
+#define MAX_COMMAND_QUEUE 100
 
 
 class NodeDhclient : public node::ObjectWrap {
-protected:
-	dhclient_config _config;
 public:
 	enum work_code {
 		DISCOVER_REQUEST,
 		RELEASE,
 		RELEASE_RE_REQUEST,
-		RENEW
+		RENEW, NO_WORK
 	};
-	enum control_event_code {
+	enum v8_event_code {
 		UNDEFINED,
 		NEWADDRESS,     // a new address was obtained
 		EXPIRED,        // the lease has expired
@@ -206,27 +209,30 @@ public:
 	class workReq {
 	protected:
 //		uv_async_t async;  // used to tell node.js event loop we are done when work is done
-		uv_work_t work;
-		bool ref;
+//		uv_work_t work;
+//		bool ref;
+		bool freeBacking;  // free the backing on delete?
 	public:
 		work_code cmdcode;
+		v8_event_code v8code;
 		_errcmn::err_ev err;
 		v8::Persistent<Function> onCompleteCB;
+		v8::Persistent<Function> onFulfillCB;
 		v8::Persistent<Object> buffer; // Buffer object passed in
 		uint32_t uint32t_data;
 		char *_backing;    // backing of the passed in Buffer
-		bool freeBacking;  // free the backing on delete?
 		int len; // amount read or written
 		NodeDhclient *self;
 		int _reqSize;
 		int retries;
 		int timeout;
 
-		workReq(NodeDhclient *i, work_code c) : ref(false), cmdcode(c), err(),
-				onCompleteCB(), buffer(),
-				_backing(NULL), freeBacking(false), len(0), self(i), _reqSize(0),
+		workReq(NodeDhclient *i, work_code c) : freeBacking(false),
+				cmdcode(c), v8code(UNDEFINED),
+				err(),
+				onCompleteCB(), onFulfillCB(), buffer(),
+				_backing(NULL),  len(0), self(i), _reqSize(0),
 				retries(DEFAULT_RETRIES), timeout(TIMEOUT_FOR_RETRY) {
-			work.data = this;
 			switch(c) {
 			// special setup for certain requests?
 			}
@@ -241,10 +247,65 @@ public:
 			if(freeBacking) ::free(_backing);
 //			uv_close((uv_handle_t *) &async,NULL);
 		}
-		void execute(uv_loop_t *l) {
-			uv_queue_work(l,&work,do_workReq,post_workReq);
-		}
+//		void execute(uv_loop_t *l) {
+//		}
 	};
+protected:
+	dhclient_config _config;
+	TWlib::tw_safeCircular<workReq *, DhclientAllocator > dhcp_thread_queue;
+	TWlib::tw_safeCircular<workReq *, DhclientAllocator > v8_cmd_queue;
+	uv_mutex_t _control;
+	bool _shutdown;
+	uv_cond_t _start_cond;
+	uv_thread_t _dhcp_thread;
+	static void dhcp_thread(void *d);
+	bool threadUp;
+
+	uv_async_t _toV8_async;       // used when me need to make a callback / take action in v8 thread
+	static void toV8_control(uv_async_t *handle, int status /*UNUSED*/);
+
+
+	bool setupThread() {
+		uv_mutex_lock(&_control);
+		bool ret = threadUp;
+		uv_mutex_unlock(&_control);
+		if(!ret) {
+	//		printf("(pre-up) HANDLE COUNT: %d\n", ((uv_handle_t *) &this->_start_cond)->loop->active_handles);
+			this->Ref();
+	//		uv_ref((uv_handle_t *)&this->_start_cond); // don't uv_ref uv_default_loop anymore - see this: https://groups.google.com/forum/#!topic/nodejs/530YS0RB42w
+			uv_thread_create(&this->_dhcp_thread,dhcp_thread,this); // start thread
+			uv_mutex_lock(&_control);
+			uv_cond_wait(&_start_cond, &_control); // wait for thread's start...
+			ret = threadUp;
+			uv_mutex_unlock(&_control);
+		}
+		return ret;
+	}
+
+	void sigThreadUp() {
+		uv_mutex_lock(&_control);
+		threadUp = true;
+		uv_cond_signal(&_start_cond);
+		uv_mutex_unlock(&_control);
+	}
+
+	void sigThreadDown() {
+		uv_mutex_lock(&_control);
+		threadUp = false;
+		uv_cond_signal(&_start_cond);
+		uv_mutex_unlock(&_control);
+	}
+
+	bool isThreadUp() {
+		bool ret = false;
+		uv_mutex_lock(&_control);
+		ret = threadUp;
+		uv_mutex_unlock(&_control);
+		return ret;
+	}
+
+
+public:
 
 
 
@@ -332,13 +393,79 @@ public:
 	}
 
 
-	NodeDhclient() {
+	NodeDhclient() : _config(),
+			dhcp_thread_queue(MAX_COMMAND_QUEUE, false), v8_cmd_queue(MAX_COMMAND_QUEUE, false),
+			_control(), _shutdown(false), _start_cond(), _dhcp_thread(), threadUp(false), _toV8_async()
+	{
 		init_defaults_config(&_config);
+
+		uv_async_init(uv_default_loop(), &_toV8_async, toV8_control);  // this needs fix, see DVC-48
+
 	}
 
 
+protected:
+
+	static bool submitToV8ControlCommand(workReq *ev);
+
 };
 
+// TLS var for use with static functions called from
+// standard ISC DHCP code
+__thread NodeDhclient *nodeClientTLS; // init is handled by dhcp_thread()
+
+bool NodeDhclient::submitToV8ControlCommand(NodeDhclient::workReq *ev) {
+	NodeDhclient *self = nodeClientTLS;
+	assert(nodeClientTLS);
+	bool ret = self->v8_cmd_queue.addMvIfRoom(ev);
+//	if(ret) {
+		self->_toV8_async.data = self;
+		uv_async_send(&self->_toV8_async); // let v8 know - calls callback...
+//	}
+	return ret;
+}
+
+
+// static - thread runner
+void NodeDhclient::dhcp_thread(void *d) {
+	NodeDhclient::workReq *work;
+	NodeDhclient *self = (NodeDhclient *) d;
+	nodeClientTLS = (NodeDhclient *) d;  // assign object value to TLS var also
+	self->sigThreadUp();
+
+	while(1) {
+		if(self->dhcp_thread_queue.removeMvOrBlock(work)) {
+			switch(work->cmdcode) {
+			case DISCOVER_REQUEST:
+				{
+					char *errstr = NULL;
+					int ret = do_dhclient_request(&errstr, &work->self->_config);
+					if(ret != 0) {
+						DBG_OUT("Got error: do_dhclient_request() = %d\n",ret);
+						work->err.setError(ret, errstr);
+						if(errstr) ::free(errstr);
+					}
+				}
+				break;
+
+			default:
+				DBG_OUT("Don't know how to do work: %d\n", work->cmdcode);
+			}
+		} else {
+			DBG_OUT("dhcp thread wakeup. failed removal.\n");
+			// wokeup for shutdown?
+			bool shutdown = false;
+			uv_mutex_lock(&self->_control);
+			shutdown = self->_shutdown;
+			uv_mutex_unlock(&self->_control);
+			if(shutdown)
+				break;
+		}
+
+	}
+	DBG_OUT("dhcp thread shutting down.");
+	self->sigThreadDown();
+}
 
 Handle<Value> NodeDhclient::NewClient(const Arguments& args) {
 	HandleScope scope;
@@ -471,59 +598,62 @@ Handle<Value> NodeDhclient::RequestLease(const Arguments& args) {
 
 	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::DISCOVER_REQUEST);
 
-	if(args.Length() > 0) {
-		 if(args[0]->IsFunction())
-				req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
-		 else
-			 return ThrowException(Exception::TypeError(String::New("bad param: requestLease([function]) -> Need [function]")));
-	}
 
-	req->execute(uv_default_loop());
+	if(!self->isThreadUp()) {
+		const unsigned argc = 2;
+		Local<Value> argv[argc];
+		_errcmn::err_ev err;
+		err.setError(DHCLIENT_EXEC_ERROR,"DHCP Thread not started.");
+		argv[0] =  Local<Value>::New(Null());
+		argv[1] = _errcmn::err_ev_to_JS(err)->ToObject();
+		if(args[0]->IsFunction())
+			Local<Function>::Cast(args[0])->Call(Context::GetCurrent()->Global(),2,argv);
+		else
+			ERROR_OUT("DHCP Thread not started. No callback provided.");
+	} else {
+		if(args.Length() > 0) {
+			 if(args[0]->IsFunction())
+					req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+			 else
+				 return ThrowException(Exception::TypeError(String::New("bad param: requestLease([function]) -> Need [function]")));
+		}
+		self->dhcp_thread_queue.add(req);
+	}
 
 	return scope.Close(Undefined());
 }
 
 
-void NodeDhclient::do_workReq(uv_work_t *req) {
-	NodeDhclient::workReq *work = (NodeDhclient::workReq *) req->data;
 
-	switch(work->cmdcode) {
-	case DISCOVER_REQUEST:
-	    {
-	    	char *errstr = NULL;
-	    	int ret = do_dhclient_request(&errstr, &work->self->_config);
-	    	if(ret != 0) {
-	    		DBG_OUT("Got error: do_dhclient_request() = %d\n",ret);
-	    		work->err.setError(ret, errstr);
-	    		if(errstr) ::free(errstr);
-	    	}
-	    }
-		break;
+// execute in the V8 thread
+// allows callbacks, etc. to happen
+void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
+ //   SixLBR::control_event *ev = (SixLBR::control_event *) handle->data;
 
-	default:
-		DBG_OUT("Don't know how to do work: %d\n", work->cmdcode);
-	}
-}
+	NodeDhclient::workReq *work;
 
-void NodeDhclient::post_workReq(uv_work_t *req, int status) {
-	NodeDhclient::workReq *work = (NodeDhclient::workReq *) req->data;
+	NodeDhclient *dhclient = (NodeDhclient *) handle->data;
 
 	const unsigned argc = 2;
 	Local<Value> argv[argc];
 
-	if(!work->onCompleteCB.IsEmpty()) {
-		if(work->err.hasErr()) {
-			argv[0] =  Local<Value>::New(Null());
-			argv[1] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-			work->onCompleteCB->Call(Context::GetCurrent()->Global(),2,argv);
-		} else {
-			// TODO make object to pass in...
-			work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+	while(dhclient->v8_cmd_queue.remove(work)) {
+
+		switch(work->v8code) {
+		case NEWADDRESS:
+			if(!work->onCompleteCB.IsEmpty()) {
+				if(work->err.hasErr()) {
+					argv[0] =  Local<Value>::New(Null());
+					argv[1] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),2,argv);
+				} else {
+					// TODO make object to pass in...
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+				}
+			}
 		}
 	}
 }
-
-
 
 
 
