@@ -294,6 +294,7 @@ protected:
 		threadUp = false;
 		uv_cond_signal(&_start_cond);
 		uv_mutex_unlock(&_control);
+		this->Unref();
 	}
 
 	bool isThreadUp() {
@@ -399,8 +400,11 @@ public:
 	{
 		init_defaults_config(&_config);
 
-		uv_async_init(uv_default_loop(), &_toV8_async, toV8_control);  // this needs fix, see DVC-48
-
+		uv_async_init(uv_default_loop(), &_toV8_async, toV8_control);
+		// unref it - we don't want this to hold up an exit of node
+		// when the thread is running, it ->Ref() NodeDhclient, and this will prevent
+		// node from exiting until the thread shutsdown anyway
+		uv_unref((uv_handle_t *) &_toV8_async);
 	}
 
 
