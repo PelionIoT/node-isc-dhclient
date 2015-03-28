@@ -92,22 +92,26 @@ namespace _errcmn {
 }
 
 // BUILDTYPE is a node-gyp-dev thing
+#ifdef _ERRCMN_MODULE_STR_
+#undef _ERRCMN_MODULE_STR_
+#endif
+#define _ERRCMN_MODULE_STR_ "DHCLIENT"
+
 #ifdef ERRCMN_DEBUG_BUILD
 #pragma message "Build is Debug"
 // confused? here: https://gcc.gnu.org/onlinedocs/cpp/Variadic-Macros.html
-#define ERROR_OUT(s,...) fprintf(stderr, "**ERROR** " s, ##__VA_ARGS__ )
+#define ERROR_OUT(s,...) fprintf(stderr, "**ERROR " _ERRCMN_MODULE_STR_ "** " s, ##__VA_ARGS__ )
 //#define ERROR_PERROR(s,...) fprintf(stderr, "*****ERROR***** " s, ##__VA_ARGS__ );
-#define ERROR_PERROR(s,E,...) { char *__S=_err_common::get_error_str(E); fprintf(stderr, "**ERROR** [ %s ] " s, __S, ##__VA_ARGS__ ); _err_common::free_error_str(__S); }
+#define ERROR_PERROR(s,E,...) { char *__S=_err_common::get_error_str(E); fprintf(stderr, "**ERROR*"_ERRCMN_MODULE_STR_"* [ %s ] " s, __S, ##__VA_ARGS__ ); _err_common::free_error_str(__S); }
 
-#define DBG_OUT(s,...) fprintf(stderr, "**DEBUG** " s, ##__VA_ARGS__ )
+#define DBG_OUT(s,...) fprintf(stderr, "**DEBUG " _ERRCMN_MODULE_STR_ "** " s, ##__VA_ARGS__ )
 #define IF_DBG( x ) { x }
 #else
-#define ERROR_OUT(s,...) fprintf(stderr, "**ERROR** " s, ##__VA_ARGS__ )//#define ERROR_PERROR(s,...) fprintf(stderr, "*****ERROR***** " s, ##__VA_ARGS__ );
-#define ERROR_PERROR(s,E,...) { char *__S=_err_common::get_error_str(E); fprintf(stderr, "**ERROR** [ %s ] " s, __S, ##__VA_ARGS__ ); _err_common::free_error_str(__S); }
+#define ERROR_OUT(s,...) fprintf(stderr, "**ERROR "_ERRCMN_MODULE_STR_"** " s, ##__VA_ARGS__ )//#define ERROR_PERROR(s,...) fprintf(stderr, "*****ERROR***** " s, ##__VA_ARGS__ );
+#define ERROR_PERROR(s,E,...) { char *__S=_err_common::get_error_str(E); fprintf(stderr, "**ERROR "_ERRCMN_MODULE_STR_"** [ %s ] " s, __S, ##__VA_ARGS__ ); _err_common::free_error_str(__S); }
 #define DBG_OUT(s,...) {}
 #define IF_DBG( x ) {}
 #endif
-
 
 
 #endif /* ERROR_COMMON_H_ */

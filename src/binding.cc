@@ -204,7 +204,9 @@ public:
 		EXPIRED,        // the lease has expired
 		RENEWAL_NOTIFY, // half the expire time is up, its time to renew
 		NEW_LEASE,       // a lease was acquired, but not necessarily a new address
-		SHUTDOWN_COMPLETE
+		SHUTDOWN_COMPLETE,
+		BAD_CONFIG,
+		GENERAL_ERROR
 	};
 
 	static void do_workReq(uv_work_t *req);
@@ -275,7 +277,7 @@ protected:
 		uv_mutex_unlock(&_control);
 		if(!ret) {
 	//		printf("(pre-up) HANDLE COUNT: %d\n", ((uv_handle_t *) &this->_start_cond)->loop->active_handles);
-			this->Ref();
+//			this->Ref();
 	//		uv_ref((uv_handle_t *)&this->_start_cond); // don't uv_ref uv_default_loop anymore - see this: https://groups.google.com/forum/#!topic/nodejs/530YS0RB42w
 			uv_thread_create(&this->_dhcp_thread,dhcp_thread,this); // start thread
 			uv_mutex_lock(&_control);
@@ -300,7 +302,7 @@ protected:
 		uv_cond_signal(&_start_cond);
 		uv_mutex_unlock(&_control);
 		uv_unref((uv_handle_t *) &_toV8_async);
-		this->Unref();
+//		this->Unref();
 	}
 
 	bool isThreadUp() {
@@ -465,6 +467,11 @@ void NodeDhclient::dhcp_thread(void *d) {
 					int ret = do_dhclient_request(&errstr, &self->_config);
 					if(ret != 0) {
 						DBG_OUT("Got error: do_dhclient_request() = %d\n",ret);
+// DHCLIENT_INVALID_CONFIG
+						if(ret == DHCLIENT_INVALID_CONFIG)
+							work->v8code = BAD_CONFIG;
+						else
+							work->v8code = GENERAL_ERROR;
 						work->err.setError(ret, errstr);
 						if(errstr) ::free(errstr);
 					}
@@ -487,7 +494,7 @@ void NodeDhclient::dhcp_thread(void *d) {
 		}
 
 	}
-	DBG_OUT("dhcp thread shutting down.");
+	DBG_OUT("dhcp thread shutting down.\n");
 	self->sigThreadDown();
 	if(shutdown_cmd)
 		self->submitToV8(shutdown_cmd);
@@ -708,23 +715,36 @@ void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
 	while(dhclient->v8_cmd_queue.remove(work)) {
 
 		switch(work->v8code) {
+		case BAD_CONFIG:
+		case GENERAL_ERROR:
+			if(work->err.hasErr()) {
+				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+			} else {
+				ERROR_OUT("toV8_control saw error - but no error info.");
+			}
 		case SHUTDOWN_COMPLETE:
 			if(work->err.hasErr()) {
 				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-				work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
 			} else {
-				work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
 			}
 			break;
 		case NEWADDRESS:
 			if(!work->onCompleteCB.IsEmpty()) {
 				if(work->err.hasErr()) {
-					argv[0] =  Local<Value>::New(Null());
-					argv[1] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),2,argv);
+//					argv[1] =  Local<Value>::New(Null());
+					argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+					if(!work->onCompleteCB.IsEmpty())
+						work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
 				} else {
 					// TODO make object to pass in...
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+					if(!work->onCompleteCB.IsEmpty())
+						work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
 				}
 			}
 			break;

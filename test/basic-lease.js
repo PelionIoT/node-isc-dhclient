@@ -45,4 +45,10 @@ client.requestLease(function(err,results){
 	} else {
 		console.log("Success: " + util.inspect(results));
 	}
+	client.shutdown(function(err){
+		if(err)
+			console.log("Err on shutdown: " + util.inspect(err));
+		else
+			console.log("dhclient shutdown complete.");
+	});	
 });

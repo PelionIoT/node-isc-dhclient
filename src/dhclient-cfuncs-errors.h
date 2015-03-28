@@ -19,10 +19,10 @@
 extern const char *MEM_FAILURE_STR;
 
 
-#define ERROR_OUT(s,...) fprintf(stderr, "**ERROR** " s, ##__VA_ARGS__ )
+#define ERROR_OUT(s,...) fprintf(stderr, "**ERROR DHCLIENT** " s, ##__VA_ARGS__ )
 
 #ifdef DEBUG
-#define DBG_OUT(s,...) fprintf(stderr, "**ERROR** " s, ##__VA_ARGS__ )
+#define DBG_OUT(s,...) fprintf(stderr, "**DEBUG DHCLIENT** " s, ##__VA_ARGS__ )
 #else
 #define DBG_OUT(s,...) {}
 #endif
