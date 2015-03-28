@@ -54,6 +54,7 @@
 #include <dns/result.h>
 
 #include "dhclient-cfuncs.h"
+#include "overlay-clparse.h"
 
 TIME default_lease_time = 43200; /* 12 hours... */
 TIME max_lease_time = 86400; /* 24 hours... */
@@ -119,6 +120,7 @@ static int check_domain_name_list(const char *ptr, size_t len, int dots);
 static int check_option_values(struct universe *universe, unsigned int opt,
 			       const char *ptr, size_t len);
 
+__thread dhclient_config *threadConfig;
 
 void init_defaults_config(dhclient_config *config) {
 	int n = 0;
@@ -137,18 +139,12 @@ void init_defaults_config(dhclient_config *config) {
 
 	config->exit_mode = 0;     // = 0 these are for dhclient process related stuff - probably can remove them
 	config->release_mode = 0;  // = 0
+
+	config->config_options = NULL;
+	config->config_options_len = 0;
 }
 
 const char *MEM_FAILURE_STR = "Malloc failure\n";
-
-#define ERROR_OUT(s,...) fprintf(stderr, "**ERROR** " s, ##__VA_ARGS__ )
-
-#define DHCLIENT_MAX_ERR_STR 100
-#define SET_DHCLIENT_ERROR_STR(s,...) { char *_err = (char *) malloc(DHCLIENT_MAX_ERR_STR); \
-		if(_err) { \
-	        snprintf(_err,DHCLIENT_MAX_ERR_STR, s, ##__VA_ARGS__ ); \
-            *err = _err; \
-	    } else { fprintf(stderr, MEM_FAILURE_STR); } }
 
 // returns 0 on now error
 int do_dhclient_request(char **err, dhclient_config *config)
@@ -168,11 +164,17 @@ int do_dhclient_request(char **err, dhclient_config *config)
 	isc_result_t result;
 	int persist = 0;
 
+//	assert(config);
+	threadConfig = config;  // assign config to the TLS var threadConfig - so we can access this in other parts
+	                        // of dhclient.
+
 // node-isc-dhclient does not use any of this stuff:
 	int no_dhclient_conf = 1;
 	int no_dhclient_db = 1;
 	int no_dhclient_pid = 1;
 	int no_dhclient_script = 1;
+
+
 
 #ifdef DHCPv6
 	int local_family_set = 0;
@@ -579,8 +581,17 @@ int do_dhclient_request(char **err, dhclient_config *config)
 	/* Discover all the network interfaces. */
 	discover_interfaces(DISCOVER_UNCONFIGURED);
 
+
+	char *parse_err_str = NULL;
+
 	/* Parse the dhclient.conf file. */
-	read_client_conf();
+	if( ISC_R_SUCCESS != read_client_conf_v8(&parse_err_str) ) {
+//		SET_DHCLIENT_ERROR_STR("Bad config_options parse.");
+		if(parse_err_str) {
+			*err = strdup(parse_err_str);
+		}
+		return DHCLIENT_INVALID_CONFIG;
+	}
 
 	/* Parse the lease database. */
 	read_client_leases();
@@ -1349,7 +1360,8 @@ void bind_lease (client)
 	tv.tv_sec = client->active->renewal;
 	tv.tv_usec = ((client->active->renewal - cur_tv.tv_sec) > 1) ?
 			random() % 1000000 : cur_tv.tv_usec;
-	add_timeout(&tv, state_bound, client, 0, 0);
+	// node-isc-dhclient: we aren't doing this - we just want to leave the thread...
+//	add_timeout(&tv, state_bound, client, 0, 0);
 
 	log_info("bound to %s -- renewal in %ld seconds.",
 	      piaddr(client->active->address),

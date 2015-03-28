@@ -34,6 +34,7 @@
 #include <TW/tw_fifo.h>
 #include <TW/tw_circular.h>
 #include <TW/tw_khash.h>
+#include <assert.h>
 typedef Allocator<Alloc_Std> DhclientAllocator;
 
 using namespace v8;
@@ -193,14 +194,17 @@ public:
 		DISCOVER_REQUEST,
 		RELEASE,
 		RELEASE_RE_REQUEST,
-		RENEW, NO_WORK
+		RENEW,
+		SHUTDOWN,
+		NO_WORK
 	};
 	enum v8_event_code {
 		UNDEFINED,
 		NEWADDRESS,     // a new address was obtained
 		EXPIRED,        // the lease has expired
 		RENEWAL_NOTIFY, // half the expire time is up, its time to renew
-		NEW_LEASE       // a lease was acquired, but not necessarily a new address
+		NEW_LEASE,       // a lease was acquired, but not necessarily a new address
+		SHUTDOWN_COMPLETE
 	};
 
 	static void do_workReq(uv_work_t *req);
@@ -277,6 +281,7 @@ protected:
 			uv_mutex_lock(&_control);
 			uv_cond_wait(&_start_cond, &_control); // wait for thread's start...
 			ret = threadUp;
+			uv_ref((uv_handle_t *) &_toV8_async);
 			uv_mutex_unlock(&_control);
 		}
 		return ret;
@@ -294,6 +299,7 @@ protected:
 		threadUp = false;
 		uv_cond_signal(&_start_cond);
 		uv_mutex_unlock(&_control);
+		uv_unref((uv_handle_t *) &_toV8_async);
 		this->Unref();
 	}
 
@@ -315,6 +321,8 @@ public:
 
 	static Handle<Value> SetConfig(const Arguments& args);
 	static Handle<Value> GetConfig(const Arguments& args);
+	static Handle<Value> Start(const Arguments& args);
+	static Handle<Value> Shutdown(const Arguments& args);
 
 	static Handle<Value> RequestLease(const Arguments& args);
 	static Handle<Value> NewClient(const Arguments& args);
@@ -387,6 +395,8 @@ public:
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("requestLease"), FunctionTemplate::New(RequestLease)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("setConfig"), FunctionTemplate::New(SetConfig)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("getConfig"), FunctionTemplate::New(GetConfig)->GetFunction());
+		tpl->PrototypeTemplate()->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
+		tpl->PrototypeTemplate()->Set(String::NewSymbol("shutdown"), FunctionTemplate::New(Shutdown)->GetFunction());
 
 
 		constructor = Persistent<Function>::New(tpl->GetFunction());
@@ -402,8 +412,9 @@ public:
 
 		uv_async_init(uv_default_loop(), &_toV8_async, toV8_control);
 		// unref it - we don't want this to hold up an exit of node
-		// when the thread is running, it ->Ref() NodeDhclient, and this will prevent
+		// when the thread is running, it ->Ref() NodeDhclient, and this *should* prevent
 		// node from exiting until the thread shutsdown anyway
+		// we also re-ref this handle as well then - b/c ->Ref() alone does not seem to work (?)
 		uv_unref((uv_handle_t *) &_toV8_async);
 	}
 
@@ -412,6 +423,11 @@ protected:
 
 	static bool submitToV8ControlCommand(workReq *ev);
 
+	bool submitToV8(workReq *ev) {
+		bool ret = v8_cmd_queue.addMvIfRoom(ev);
+		_toV8_async.data = this;
+		uv_async_send(&_toV8_async); // let v8 know - calls callback...
+	}
 };
 
 // TLS var for use with static functions called from
@@ -419,37 +435,41 @@ protected:
 __thread NodeDhclient *nodeClientTLS; // init is handled by dhcp_thread()
 
 bool NodeDhclient::submitToV8ControlCommand(NodeDhclient::workReq *ev) {
-	NodeDhclient *self = nodeClientTLS;
 	assert(nodeClientTLS);
-	bool ret = self->v8_cmd_queue.addMvIfRoom(ev);
-//	if(ret) {
-		self->_toV8_async.data = self;
-		uv_async_send(&self->_toV8_async); // let v8 know - calls callback...
-//	}
-	return ret;
+	return nodeClientTLS->submitToV8(ev);
 }
 
 
 // static - thread runner
 void NodeDhclient::dhcp_thread(void *d) {
-	NodeDhclient::workReq *work;
+	NodeDhclient::workReq *work = NULL;
 	NodeDhclient *self = (NodeDhclient *) d;
 	nodeClientTLS = (NodeDhclient *) d;  // assign object value to TLS var also
 	self->sigThreadUp();
+	bool shutdown = false;
 
-	while(1) {
-		if(self->dhcp_thread_queue.removeMvOrBlock(work)) {
+	NodeDhclient::workReq *shutdown_cmd = NULL;
+
+	while(!shutdown) {
+		if(self->dhcp_thread_queue.removeOrBlock(work)) {
+			DBG_OUT("have work: %p\n",work);
 			switch(work->cmdcode) {
+			case SHUTDOWN:
+				shutdown = true;
+				shutdown_cmd = work;
+				shutdown_cmd->v8code = SHUTDOWN_COMPLETE;
+				break;
 			case DISCOVER_REQUEST:
 				{
 					char *errstr = NULL;
-					int ret = do_dhclient_request(&errstr, &work->self->_config);
+					int ret = do_dhclient_request(&errstr, &self->_config);
 					if(ret != 0) {
 						DBG_OUT("Got error: do_dhclient_request() = %d\n",ret);
 						work->err.setError(ret, errstr);
 						if(errstr) ::free(errstr);
 					}
 				}
+				self->submitToV8(work);
 				break;
 
 			default:
@@ -469,6 +489,8 @@ void NodeDhclient::dhcp_thread(void *d) {
 	}
 	DBG_OUT("dhcp thread shutting down.");
 	self->sigThreadDown();
+	if(shutdown_cmd)
+		self->submitToV8(shutdown_cmd);
 }
 
 Handle<Value> NodeDhclient::NewClient(const Arguments& args) {
@@ -499,6 +521,42 @@ Persistent<ObjectTemplate> NodeDhclient::prototype;
 //	int release_mode;  // = 0
 //} dhclient_config;
 
+Handle<Value> NodeDhclient::Shutdown(const Arguments& args) {
+	HandleScope scope;
+
+	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+
+	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::SHUTDOWN);
+
+
+	if(!self->isThreadUp()) {
+		if(args.Length() > 0) {
+			 if(args[0]->IsFunction()) {
+					Local<Function>::Cast(args[0])->Call(Context::GetCurrent()->Global(),0,NULL);
+			 } else
+				 return ThrowException(Exception::TypeError(String::New("bad param: shutdown([function]) -> Need [function]")));
+		}
+	} else if(args.Length() > 0) {
+		 if(args[0]->IsFunction())
+				req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+		 else
+			 return ThrowException(Exception::TypeError(String::New("bad param: shutdown([function]) -> Need [function]")));
+	}
+	self->dhcp_thread_queue.add(req);
+
+	return scope.Close(Undefined());
+}
+
+/**
+ * Blocks until thread is really up.
+ */
+Handle<Value> NodeDhclient::Start(const Arguments& args) {
+	HandleScope scope;
+
+	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+
+	return scope.Close(Boolean::New(obj->setupThread()));
+}
 
 
 Handle<Value> NodeDhclient::SetConfig(const Arguments& args) {
@@ -547,6 +605,9 @@ Handle<Value> NodeDhclient::SetConfig(const Arguments& args) {
 		V8_IFEXIST_TO_INT_CAST("exit_mode",obj->_config.exit_mode,v,o,int);
 		V8_IFEXIST_TO_INT_CAST("release_mode",obj->_config.release_mode,v,o,int);
 
+		V8_IFEXIST_TO_DYN_CSTR("config_options",obj->_config.config_options,v,o);
+		if(obj->_config.config_options) obj->_config.config_options_len = strlen(obj->_config.config_options);
+
 	} else {
 		return ThrowException(Exception::TypeError(String::New("bad param: setConfig([object])")));
 	}
@@ -590,6 +651,8 @@ Handle<Value> NodeDhclient::GetConfig(const Arguments& args) {
 	INT32_TO_V8("exit_mode",obj->_config.exit_mode,o);
 	INT32_TO_V8("release_mode",obj->_config.release_mode,o);
 
+	CSTR_TO_V8STR("config_options",obj->_config.config_options,o);
+
 	return scope.Close(o);
 }
 
@@ -601,6 +664,7 @@ Handle<Value> NodeDhclient::RequestLease(const Arguments& args) {
 	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
 
 	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::DISCOVER_REQUEST);
+	DBG_OUT("created work: %p\n",req);
 
 
 	if(!self->isThreadUp()) {
@@ -644,6 +708,14 @@ void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
 	while(dhclient->v8_cmd_queue.remove(work)) {
 
 		switch(work->v8code) {
+		case SHUTDOWN_COMPLETE:
+			if(work->err.hasErr()) {
+				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+				work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+			} else {
+				work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+			}
+			break;
 		case NEWADDRESS:
 			if(!work->onCompleteCB.IsEmpty()) {
 				if(work->err.hasErr()) {
@@ -655,6 +727,9 @@ void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
 					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
 				}
 			}
+			break;
+		default:
+			DBG_OUT("Unhandled v8code: 0x%x", work->v8code);
 		}
 	}
 }

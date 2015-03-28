@@ -7,10 +7,10 @@
       	"./src/binding.cc",
       	"./src/error-common.cc",
         "./src/dhclient-cfuncs.c",
-        "./src/overlay-errwarn.c",        
-		"./deps/isc-dhcp/client/dhc6.c",
-		"./deps/isc-dhcp/client/clparse.c",
-		"./deps/isc-dhcp/client/dhc6.c",
+        "./src/overlay-errwarn.c",
+        "./src/overlay-clparse.c",
+        "./src/overlay-parse.c",
+        
 
 # common/libdhcp.a see Makefile.am
 #		alloc.c bpf.c comapi.c conflex.c ctrace.c discover.c \
@@ -19,7 +19,9 @@
 #		    packet.c parse.c print.c raw.c resolv.c socket.c \
 #		    tables.c tr.c tree.c upf.c
 #		
-		
+
+		"./deps/isc-dhcp/client/dhc6.c",
+#		"./deps/isc-dhcp/client/clparse.c",		
 		"./deps/isc-dhcp/common/alloc.c",
 		"./deps/isc-dhcp/common/bpf.c",
 		"./deps/isc-dhcp/common/comapi.c",
@@ -40,7 +42,7 @@
 		"./deps/isc-dhcp/common/ns_name.c",
 		"./deps/isc-dhcp/common/options.c",
 		"./deps/isc-dhcp/common/packet.c",
-		"./deps/isc-dhcp/common/parse.c",
+#		"./deps/isc-dhcp/common/parse.c",
 		"./deps/isc-dhcp/common/print.c",
 		"./deps/isc-dhcp/common/raw.c",
 		"./deps/isc-dhcp/common/resolv.c",
@@ -78,7 +80,6 @@
 		"./deps/isc-dhcp/omapip/toisc.c",
 		"./deps/isc-dhcp/omapip/iscprint.c",
 		"./deps/isc-dhcp/omapip/isclib.c",
-		
 
 
 			
@@ -104,7 +105,13 @@
 		"-DDHCPv6=1",
         "-D_ERRCMN_ADD_CONSTS",
         "-DLOCALSTATEDIR=\"/NOVAR\"",
-        # out of config.h
+
+# these two provide heavy debugging for the semaphore / queing stuff
+#        "-DDEBUG_TW_CIRCULAR_H",
+#        "-D_TW_SEMA2_HEAVY_DEBUG",
+        
+        # out of config.h or site.h
+#        "-DNSUPDATE"
         
 
       ],
