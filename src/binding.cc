@@ -203,7 +203,11 @@ public:
 		NEWADDRESS,     // a new address was obtained
 		EXPIRED,        // the lease has expired
 		RENEWAL_NOTIFY, // half the expire time is up, its time to renew
-		NEW_LEASE,       // a lease was acquired, but not necessarily a new address
+
+		// a lease was acquired, but not necessarily a new address
+		// (correspond to what would go in /var/lib/dhcp/dhclient.leases)
+		RECORD_NEW_LEASE,
+
 		SHUTDOWN_COMPLETE,
 		BAD_CONFIG,
 		GENERAL_ERROR
@@ -218,10 +222,12 @@ public:
 //		uv_work_t work;
 //		bool ref;
 		bool freeBacking;  // free the backing on delete?
+
 	public:
 		work_code cmdcode;
 		v8_event_code v8code;
 		_errcmn::err_ev err;
+		bool originV8; // are callbacks init-ed?
 		v8::Persistent<Function> onCompleteCB;
 		v8::Persistent<Function> onFulfillCB;
 		v8::Persistent<Object> buffer; // Buffer object passed in
@@ -233,9 +239,11 @@ public:
 		int retries;
 		int timeout;
 
+
 		workReq(NodeDhclient *i, work_code c) : freeBacking(false),
 				cmdcode(c), v8code(UNDEFINED),
 				err(),
+				originV8(true),
 				onCompleteCB(), onFulfillCB(), buffer(),
 				_backing(NULL),  len(0), self(i), _reqSize(0),
 				retries(DEFAULT_RETRIES), timeout(TIMEOUT_FOR_RETRY) {
@@ -243,10 +251,6 @@ public:
 			// special setup for certain requests?
 			}
 		}
-		// complete() to be called from worker (6lbr) thread. Alerts v8 thread that this work is done.
-		void complete() {
-//			uv_async_send(&async);
-		};
 		workReq() = delete;
 		// NOTE: workReq should be deleted from the v8 thread!!
 		~workReq() {
@@ -255,6 +259,21 @@ public:
 		}
 //		void execute(uv_loop_t *l) {
 //		}
+	protected:
+		// used to create work object that originates from dhcp thread (not v8)
+		workReq(NodeDhclient *i, v8_event_code c) : freeBacking(false),
+				cmdcode(NO_WORK), v8code(c),
+				err(),
+				originV8(false),
+//				onCompleteCB(), onFulfillCB(), buffer(),
+				_backing(NULL),  len(0), self(i), _reqSize(0),
+				retries(DEFAULT_RETRIES), timeout(TIMEOUT_FOR_RETRY) {
+			};
+	public:
+		static workReq *createDhcpOriginatedWork(NodeDhclient *i, v8_event_code c) {
+			return new workReq(i,c);
+		};
+
 	};
 protected:
 	dhclient_config _config;
@@ -266,6 +285,7 @@ protected:
 	uv_thread_t _dhcp_thread;
 	static void dhcp_thread(void *d);
 	bool threadUp;
+	v8::Persistent<Function> leaseCallback;
 
 	uv_async_t _toV8_async;       // used when me need to make a callback / take action in v8 thread
 	static void toV8_control(uv_async_t *handle, int status /*UNUSED*/);
@@ -327,6 +347,7 @@ public:
 	static Handle<Value> Shutdown(const Arguments& args);
 
 	static Handle<Value> RequestLease(const Arguments& args);
+	static Handle<Value> SetLeaseCallback(const Arguments& args);
 	static Handle<Value> NewClient(const Arguments& args);
 
 
@@ -395,6 +416,8 @@ public:
 //		tpl->PrototypeTemplate()->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
 //		tpl->PrototypeTemplate()->Set(String::NewSymbol("stop"), FunctionTemplate::New(Stop)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("requestLease"), FunctionTemplate::New(RequestLease)->GetFunction());
+		tpl->PrototypeTemplate()->Set(String::NewSymbol("_setLeaseCallback"), FunctionTemplate::New(SetLeaseCallback)->GetFunction());
+
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("setConfig"), FunctionTemplate::New(SetConfig)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("getConfig"), FunctionTemplate::New(GetConfig)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
@@ -408,7 +431,9 @@ public:
 
 	NodeDhclient() : _config(),
 			dhcp_thread_queue(MAX_COMMAND_QUEUE, false), v8_cmd_queue(MAX_COMMAND_QUEUE, false),
-			_control(), _shutdown(false), _start_cond(), _dhcp_thread(), threadUp(false), _toV8_async()
+			_control(), _shutdown(false), _start_cond(), _dhcp_thread(), threadUp(false),
+			leaseCallback(),
+			_toV8_async()
 	{
 		init_defaults_config(&_config);
 
@@ -420,6 +445,8 @@ public:
 		uv_unref((uv_handle_t *) &_toV8_async);
 	}
 
+	// external friend functions - interconnect to regular dhclient C code
+	friend int submit_lease_to_v8(char *json);
 
 protected:
 
@@ -429,6 +456,7 @@ protected:
 		bool ret = v8_cmd_queue.addMvIfRoom(ev);
 		_toV8_async.data = this;
 		uv_async_send(&_toV8_async); // let v8 know - calls callback...
+		return ret;
 	}
 };
 
@@ -563,6 +591,20 @@ Handle<Value> NodeDhclient::Start(const Arguments& args) {
 	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
 
 	return scope.Close(Boolean::New(obj->setupThread()));
+}
+
+Handle<Value> NodeDhclient::SetLeaseCallback(const Arguments& args) {
+	HandleScope scope;
+
+	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+
+	if(args.Length() > 0 && args[0]->IsFunction()) {
+		obj->leaseCallback = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+	} else {
+		 return ThrowException(Exception::TypeError(String::New("bad param: setLeaseCallback([function])")));
+	}
+
+	return scope.Close(Undefined());
 }
 
 
@@ -715,6 +757,18 @@ void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
 	while(dhclient->v8_cmd_queue.remove(work)) {
 
 		switch(work->v8code) {
+		case RECORD_NEW_LEASE:
+		{
+			// call leaseLog callback
+			if(!dhclient->leaseCallback.IsEmpty()) {
+				argv[0] = String::New(work->_backing,work->len);
+				dhclient->leaseCallback->Call(Context::GetCurrent()->Global(),1,argv);
+			} else {
+				ERROR_OUT("No leaseCallback set! dump: %s\n", work->_backing);
+			}
+			delete work;
+		}
+			break;
 		case BAD_CONFIG:
 		case GENERAL_ERROR:
 			if(work->err.hasErr()) {
@@ -755,7 +809,23 @@ void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
 }
 
 
+int submit_lease_to_v8(char *json) {
+	if(json) {
+		assert(nodeClientTLS);
 
+
+		NodeDhclient::workReq *work = NodeDhclient::workReq::createDhcpOriginatedWork(nodeClientTLS,NodeDhclient::RECORD_NEW_LEASE);
+		work->_backing = json;
+		work->len = strlen(json)+1;
+		if(nodeClientTLS->submitToV8(work)) {
+			return 1;
+		} else {
+			ERROR_OUT("Failed to add event to queue: v8_cmd_queue\n");
+			return 0;
+		}
+	}
+	return 0;
+}
 
 //Persistent<Function> SixLBR::constructor;
 //
@@ -2219,7 +2289,7 @@ void InitAll(Handle<Object> exports, Handle<Object> module) {
 	NodeDhclient::Init();
 
 //	exports->Set(String::NewSymbol("IscDhclient"), FunctionTemplate::New(NodeDhclient::New)->GetFunction());
-	exports->Set(String::NewSymbol("newClient"), FunctionTemplate::New(NodeDhclient::NewClient)->GetFunction());
+	exports->Set(String::NewSymbol("_newClient"), FunctionTemplate::New(NodeDhclient::NewClient)->GetFunction());
 //	exports->Set(String::NewSymbol("readPseudo"), FunctionTemplate::New(PseudoFs::ReadPseudofile)->GetFunction());
 //	exports->Set(String::NewSymbol("writePseudo"), FunctionTemplate::New(PseudoFs::WritePseudofile)->GetFunction());
 

@@ -14,6 +14,10 @@
 
 #define DHCLIENT_MAX_INTERFACES 10
 
+// leases are returned as JSON string in our variation of dhclient.
+// this is max size of that string
+#define MAX_LEASE_STR_SIZE 1000
+
 // Defines needed for isc-dhcp
 //#define LOCALSTATEDIR "/NOVAR"
 
@@ -142,9 +146,9 @@ struct node_dhclient_client_config {
 
 extern __thread dhclient_config *threadConfig;  // defined in dhclient-cfuncs.c
 
-void init_defaults_config(dhclient_config *config);
-int do_dhclient_request(char **errstr, dhclient_config *config);
-
+extern void init_defaults_config(dhclient_config *config);
+extern int do_dhclient_request(char **errstr, dhclient_config *config);
+extern int submit_lease_to_v8(char *json);
 
 #ifdef __cplusplus
 }

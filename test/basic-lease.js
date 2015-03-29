@@ -1,15 +1,6 @@
 var util = require('util');
 
-var nativelib = null;
-try {
-	nativelib = require('../build/Release/isc_dhclient.node');
-} catch(e) {
-	if(e.code == 'MODULE_NOT_FOUND')
-		nativelib = require('../build/Debug/isc_dhclient.node');
-	else
-		console.error("Error in nativelib [debug]: " + e + " --> " + e.stack);
-}
-var DHCP = nativelib;
+var DHCP = require('../index.js');
 
 
 var client = DHCP.newClient();
@@ -29,12 +20,20 @@ conf.interfaces.push("eth0");
 
 conf.config_options = 
 "timeout 60;\
-MISTAKE \
 do-forward-updates false;\
 option rfc3442-classless-static-routes code 121 = array of unsigned integer 8;"
 client.setConfig(conf);
 
 console.log("conf: " + util.inspect(conf));
+
+client.setLeaseCallback(function(lease) {
+	if(lease) {
+		console.log("got lease: ");
+		console.dir(lease);
+	} else {
+		console.log("error in parsing lease.");
+	}
+});
 
 client.start();
 

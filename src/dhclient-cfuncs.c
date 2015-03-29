@@ -122,6 +122,13 @@ static int check_option_values(struct universe *universe, unsigned int opt,
 
 __thread dhclient_config *threadConfig;
 
+//__thread char *json_lease_info;
+
+int write_client_lease_v8 (struct client_state *client, struct client_lease *lease,
+		int rewrite, int makesure);
+isc_result_t write_client6_lease_v8(struct client_state *client, struct dhc6_lease *lease,
+		    int rewrite, int sync);
+
 void init_defaults_config(dhclient_config *config) {
 	int n = 0;
 	config->local_family = AF_INET;  // = AF_INET  or  AF_INET6
@@ -1348,7 +1355,7 @@ void bind_lease (client)
 	/* Write out the new lease if it has been long enough. */
 	if (!client->last_write ||
 	    (cur_time - client->last_write) >= MIN_LEASE_WRITE)
-		write_client_lease(client, client->new, 0, 1);
+		write_client_lease_v8(client, client->new, 0, 1);
 
 	/* Replace the old active lease with the new one. */
 	if (client->active)
@@ -2388,7 +2395,7 @@ void send_release (cpp)
 	client -> active -> expiry =
 		client -> active -> renewal =
 		client -> active -> rebind = cur_time;
-	if (!write_client_lease (client, client -> active, 1, 1)) {
+	if (!write_client_lease_v8 (client, client -> active, 1, 1)) {
 		log_error ("Can't release lease: lease write failed.");
 		return;
 	}
@@ -2823,10 +2830,10 @@ void rewrite_client_leases ()
 	for (ip = interfaces; ip; ip = ip -> next) {
 		for (client = ip -> client; client; client = client -> next) {
 			for (lp = client -> leases; lp; lp = lp -> next) {
-				write_client_lease (client, lp, 1, 0);
+				write_client_lease_v8 (client, lp, 1, 0);
 			}
 			if (client -> active)
-				write_client_lease (client,
+				write_client_lease_v8 (client,
 						    client -> active, 1, 0);
 
 			if (client->active_lease != NULL)
@@ -2862,6 +2869,7 @@ void rewrite_client_leases ()
 	fflush (leaseFile);
 }
 
+#ifdef YEAH_SKIP_ME
 void write_lease_option (struct option_cache *oc,
 			 struct packet *packet, struct lease *lease,
 			 struct client_state *client_state,
@@ -2917,6 +2925,79 @@ write_options(struct client_state *client, struct option_state *options,
 				     (char *)preamble, write_lease_option);
 	}
 }
+#endif
+
+// used by these two functions - not memory managed by them
+static __thread char *options_json_local;
+static __thread int _json_comma_count;
+
+void write_lease_option_v8 (struct option_cache *oc,
+			 struct packet *packet, struct lease *lease,
+			 struct client_state *client_state,
+			 struct option_state *in_options,
+			 struct option_state *cfg_options,
+			 struct binding_scope **scope,
+			 struct universe *u, void *stuff)
+{
+	const char *name, *dot;
+	struct data_string ds;
+	char *preamble = stuff;
+
+	memset (&ds, 0, sizeof ds);
+
+	if (u != &dhcp_universe) {
+		name = u -> name;
+		dot = ".";
+	} else {
+		name = "";
+		dot = "";
+	}
+
+
+	if (evaluate_option_cache (&ds, packet, lease, client_state,
+				   in_options, cfg_options, scope, oc, MDL)) {
+		if(_json_comma_count > 0)
+			APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,options_json_local," ,");
+		/* The option name */
+		APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,options_json_local,"%s \"%s%s%s\":", preamble,
+							name, dot, oc->option->name);
+
+//		fprintf(leaseFile, "%soption %s%s%s", preamble,
+//			name, dot, oc->option->name);
+
+		/* The option value if there is one */
+		if ((oc->option->format == NULL) ||
+		    (oc->option->format[0] != 'Z')) {
+			const char *val = pretty_print_option(oc->option, ds.data,
+									    ds.len, 1, 1);
+			if(val && val[0] != '"') // if the option is wrapped in " already, then don't wrap
+				APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,options_json_local,"\"%s\"",val);
+			else
+				APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,options_json_local,"%s",val);
+		}
+
+		/* The closing semi-colon and newline */
+//		fprintf(leaseFile, ";\n");
+		_json_comma_count++;
+
+		data_string_forget (&ds, MDL);
+	}
+}
+
+/* Write an option cache to the lease store. */
+static void
+write_options_v8(struct client_state *client, struct option_state *options,
+	      const char *preamble, char *json)
+{
+	int i;
+	options_json_local = json;
+	_json_comma_count = 0;
+	for (i = 0; i < options->universe_count; i++) {
+		option_space_foreach(NULL, NULL, client, NULL, options,
+				     &global_scope, universes[i],
+				     (char *)preamble, write_lease_option_v8);
+	}
+}
 
 /* Write the default DUID to the lease store. */
 static isc_result_t
@@ -2956,6 +3037,7 @@ write_duid(struct data_string *duid)
 	return ISC_R_SUCCESS;
 }
 
+#ifdef YEAH_SKIP_ME
 /* Write a DHCPv6 lease to the store. */
 isc_result_t
 write_client6_lease(struct client_state *client, struct dhc6_lease *lease,
@@ -3084,7 +3166,140 @@ write_client6_lease(struct client_state *client, struct dhc6_lease *lease,
 
 	return ISC_R_SUCCESS;
 }
+#endif
 
+
+/* Write a DHCPv6 lease to the store. */
+isc_result_t
+write_client6_lease_v8(struct client_state *client, struct dhc6_lease *lease,
+		    int rewrite, int sync)
+{
+	struct dhc6_ia *ia;
+	struct dhc6_addr *addr;
+	int stat;
+	const char *ianame;
+
+	/* This should include the current lease. */
+//	if (!rewrite && (leases_written++ > 20)) {
+//		rewrite_client_leases();
+//		leases_written = 0;
+//		return ISC_R_SUCCESS;
+//	}
+
+	if (client == NULL || lease == NULL)
+		return DHCP_R_INVALIDARG;
+
+	if (leaseFile == NULL) {	/* XXX? */
+		leaseFile = fopen(path_dhclient_db, "w");
+		if (leaseFile == NULL) {
+			log_error("can't create %s: %m", path_dhclient_db);
+			return ISC_R_IOERROR;
+		}
+	}
+
+	stat = fprintf(leaseFile, "lease6 {\n");
+	if (stat <= 0)
+		return ISC_R_IOERROR;
+
+	stat = fprintf(leaseFile, "  interface \"%s\";\n",
+		       client->interface->name);
+	if (stat <= 0)
+		return ISC_R_IOERROR;
+
+	for (ia = lease->bindings ; ia != NULL ; ia = ia->next) {
+		switch (ia->ia_type) {
+			case D6O_IA_NA:
+			default:
+				ianame = "ia-na";
+				break;
+			case D6O_IA_TA:
+				ianame = "ia-ta";
+				break;
+			case D6O_IA_PD:
+				ianame = "ia-pd";
+				break;
+		}
+		stat = fprintf(leaseFile, "  %s %s {\n",
+			       ianame, print_hex_1(4, ia->iaid, 12));
+		if (stat <= 0)
+			return ISC_R_IOERROR;
+
+		if (ia->ia_type != D6O_IA_TA)
+			stat = fprintf(leaseFile, "    starts %d;\n"
+						  "    renew %u;\n"
+						  "    rebind %u;\n",
+				       (int)ia->starts, ia->renew, ia->rebind);
+		else
+			stat = fprintf(leaseFile, "    starts %d;\n",
+				       (int)ia->starts);
+		if (stat <= 0)
+			return ISC_R_IOERROR;
+
+		for (addr = ia->addrs ; addr != NULL ; addr = addr->next) {
+			if (ia->ia_type != D6O_IA_PD)
+				stat = fprintf(leaseFile,
+					       "    iaaddr %s {\n",
+					       piaddr(addr->address));
+			else
+				stat = fprintf(leaseFile,
+					       "    iaprefix %s/%d {\n",
+					       piaddr(addr->address),
+					       (int)addr->plen);
+			if (stat <= 0)
+				return ISC_R_IOERROR;
+
+			stat = fprintf(leaseFile, "      starts %d;\n"
+						  "      preferred-life %u;\n"
+						  "      max-life %u;\n",
+				       (int)addr->starts, addr->preferred_life,
+				       addr->max_life);
+			if (stat <= 0)
+				return ISC_R_IOERROR;
+
+			if (addr->options != NULL)
+				write_options(client, addr->options, "      ");
+
+			stat = fprintf(leaseFile, "    }\n");
+			if (stat <= 0)
+				return ISC_R_IOERROR;
+		}
+
+		if (ia->options != NULL)
+			write_options(client, ia->options, "    ");
+
+		stat = fprintf(leaseFile, "  }\n");
+		if (stat <= 0)
+			return ISC_R_IOERROR;
+	}
+
+	if (lease->released) {
+		stat = fprintf(leaseFile, "  released;\n");
+		if (stat <= 0)
+			return ISC_R_IOERROR;
+	}
+
+	if (lease->options != NULL)
+		write_options(client, lease->options, "  ");
+
+	stat = fprintf(leaseFile, "}\n");
+	if (stat <= 0)
+		return ISC_R_IOERROR;
+
+	if (fflush(leaseFile) != 0)
+		return ISC_R_IOERROR;
+
+	if (sync) {
+		if (fsync(fileno(leaseFile)) < 0) {
+			log_error("write_client_lease: fsync(): %m");
+			return ISC_R_IOERROR;
+		}
+	}
+
+	return ISC_R_SUCCESS;
+}
+
+#ifdef YEAH_SKIP_ME
+// original code...
 int write_client_lease (client, lease, rewrite, makesure)
 	struct client_state *client;
 	struct client_lease *lease;
@@ -3222,7 +3437,179 @@ int write_client_lease (client, lease, rewrite, makesure)
 
 	return errors ? 0 : 1;
 }
+#endif
 
+
+// modified write_client_lease for node-isc-dhclient
+// instead of writing to file we make a JSON string
+int write_client_lease_v8 (client, lease, rewrite, makesure)
+	struct client_state *client;
+	struct client_lease *lease;
+	int rewrite;
+	int makesure;
+{
+	struct data_string ds;
+	int errors = 0;
+	char *s;
+	const char *tval;
+
+	if (!rewrite) {
+		if (leases_written++ > 20) {
+			rewrite_client_leases ();
+			leases_written = 0;
+		}
+	}
+
+	char *json = (char *) malloc(MAX_LEASE_STR_SIZE);
+	*json = '\0';
+
+	/* If the lease came from the config file, we don't need to stash
+	   a copy in the lease database. */
+	if (lease -> is_static)
+		return 1;
+
+//	if (leaseFile == NULL) {	/* XXX */
+//		leaseFile = fopen (path_dhclient_db, "w");
+//		if (leaseFile == NULL) {
+//			log_error ("can't create %s: %m", path_dhclient_db);
+//			return 0;
+//		}
+//	}
+
+	errno = 0;
+	APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json,"{\n");
+//	fprintf (leaseFile, "lease {\n");
+	if (lease -> is_bootp) {
+		APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json,"\"bootp\": true,\n");
+//		fprintf (leaseFile, "  bootp;\n");
+		if (errno) {
+			++errors;
+			errno = 0;
+		}
+	}
+	APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, "  \"interface\": \"%s\",\n",
+		 client -> interface -> name);
+//	fprintf (leaseFile, "  interface \"%s\";\n",
+//		 client -> interface -> name);
+	if (errno) {
+		++errors;
+		errno = 0;
+	}
+	if (client -> name) {
+		APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, "  \"name\": \"%s\",\n", client -> name);
+//		fprintf (leaseFile, "  name \"%s\";\n", client -> name);
+		if (errno) {
+			++errors;
+			errno = 0;
+		}
+	}
+	APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, "  \"fixed_address\": \"%s\",\n",
+			 piaddr (lease -> address));
+//	fprintf (leaseFile, "  fixed-address %s;\n",
+//		 piaddr (lease -> address));
+	if (errno) {
+		++errors;
+		errno = 0;
+	}
+	if (lease -> filename) {
+		s = quotify_string (lease -> filename, MDL);
+		if (s) {
+			APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, "  \"filename\": \"%s\",\n", s);
+//			fprintf (leaseFile, "  \"filename\": \"%s\",\n", s);
+			if (errno) {
+				++errors;
+				errno = 0;
+			}
+			dfree (s, MDL);
+		} else
+			errors++;
+
+	}
+	if (lease->server_name != NULL) {
+		s = quotify_string(lease->server_name, MDL);
+		if (s != NULL) {
+			APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, "  \"server_name\": \"%s\",\n", s);
+//			fprintf(leaseFile, "  server-name \"%s\";\n", s);
+			if (errno) {
+				++errors;
+				errno = 0;
+			}
+			dfree(s, MDL);
+		} else
+			++errors;
+	}
+	if (lease -> medium) {
+		s = quotify_string (lease -> medium -> string, MDL);
+		if (s) {
+			APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, "  \"medium\": \"%s\",\n", s);
+//			fprintf (leaseFile, "  medium \"%s\";\n", s);
+			if (errno) {
+				++errors;
+				errno = 0;
+			}
+			dfree (s, MDL);
+		} else
+			errors++;
+	}
+	if (errno != 0) {
+		errors++;
+		errno = 0;
+	}
+
+	memset (&ds, 0, sizeof ds);
+
+	APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, "\"options\":{\n");
+	write_options_v8(client, lease->options, "  ",json);
+	APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, "}\n");
+
+	tval = print_time(lease->renewal);
+	if (tval != NULL)
+		APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json,  ",  \"renew\": \"%s\"\n", tval);
+//	if (tval == NULL ||
+//			APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json,  "  \"renew\": \"%s\"\n", tval))
+//		;
+//					fprintf(leaseFile, "  renew %s\n", tval) < 0)
+//		errors++;
+
+	tval = print_time(lease->rebind);
+	if (tval != NULL)
+		APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, ",  \"rebind\": \"%s\"\n", tval);
+//	if (tval == NULL ||
+//	    fprintf(leaseFile, "  rebind %s\n", tval) < 0)
+//		errors++;
+
+	tval = print_time(lease->expiry);
+	if (tval != NULL)
+		APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, ",  \"expire\": \"%s\"\n", tval);
+
+	APPEND_ERROR_P_STR(MAX_LEASE_STR_SIZE,json, " }");
+
+	//	if (tval == NULL ||
+//	    fprintf(leaseFile, "  expire %s\n", tval) < 0)
+//		errors++;
+
+//	if (fprintf(leaseFile, "}\n") < 0)
+//		errors++;
+
+//	if (fflush(leaseFile) != 0)
+//		errors++;
+
+	client->last_write = cur_time;
+
+//	if (!errors && makesure) {
+//		if (fsync (fileno (leaseFile)) < 0) {
+//			log_info ("write_client_lease: %m");
+//			return 0;
+//		}
+//	}
+
+	submit_lease_to_v8(json);
+
+	// send event to v8
+
+
+	return errors ? 0 : 1;
+}
 /* Variables holding name of script and file pointer for writing to
    script.   Needless to say, this is not reentrant - only one script
    can be invoked at a time. */
