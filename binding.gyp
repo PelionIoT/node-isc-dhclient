@@ -79,10 +79,7 @@
 		"./deps/isc-dhcp/omapip/trace.c",
 		"./deps/isc-dhcp/omapip/toisc.c",
 		"./deps/isc-dhcp/omapip/iscprint.c",
-		"./deps/isc-dhcp/omapip/isclib.c",
-
-
-			
+		"./deps/isc-dhcp/omapip/isclib.c",	
 
       ],
 
