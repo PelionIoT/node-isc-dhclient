@@ -1,4 +1,3 @@
-	./configure --prefix=${BIND_DIR}/build CFLAGS="-fPIC" --disable-kqueue --disable-epoll --disable-devpoll --without-openssl --without-libxml2 --enable-exportlib --enable-threads=no --with-export-includedir=${BIND_DIR}/include --with-export-libdir=${BIND_DIR}/lib --with-gssapi=no > ${BIND_DIR}/configure.log
 #!/bin/bash
 
 # http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
