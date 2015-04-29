@@ -1,3 +1,4 @@
+	./configure --prefix=${BIND_DIR}/build CFLAGS="-fPIC" --disable-kqueue --disable-epoll --disable-devpoll --without-openssl --without-libxml2 --enable-exportlib --enable-threads=no --with-export-includedir=${BIND_DIR}/include --with-export-libdir=${BIND_DIR}/lib --with-gssapi=no > ${BIND_DIR}/configure.log
 #!/bin/bash
 
 # http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
@@ -15,6 +16,7 @@ AUX_LIBS=${DEPS_DIR}/isc-dhcp/bind
 BIND_DIR=${DEPS_DIR}/isc-dhcp/bind
 
 BIND_SRC_DIR=${DEPS_DIR}/isc-dhcp/bind/bind-expanded-tar
+ISC_DIR=${DEPS_DIR}/isc-dhcp
 
 if [ "$1" == "rebuild" ]; then
 	REBUILD=1
@@ -44,5 +46,11 @@ else
 	rm -rf ${BIND_DIR}/build
 	popd
 fi
+
+popd
+
+pushd $ISC_DIR
+	
+./configure --prefix=${BIND_DIR}/build CFLAGS="-fPIC"  > ${BIND_DIR}/configure.log
 
 popd
