@@ -2166,17 +2166,19 @@ void state_panic (cpp)
 		exit (2);
 	}
 
-	log_info ("No working leases in persistent database - sleeping.");
+	log_info ("No working leases in persistent database - continuing.");
 	script_init (client, "FAIL", (struct string_list *)0);
 	if (client -> alias)
 		script_write_params (client, "alias_", client -> alias);
 	script_go (client);
 	client -> state = S_INIT;
-	tv.tv_sec = cur_tv.tv_sec + ((client->config->retry_interval + 1) / 2 +
-		    (random() % client->config->retry_interval));
-	tv.tv_usec = ((tv.tv_sec - cur_tv.tv_sec) > 1) ?
-			random() % 1000000 : cur_tv.tv_usec;
-	add_timeout(&tv, state_init, client, 0, 0);
+	state_init(client);
+
+	//tv.tv_sec = cur_tv.tv_sec + ((client->config->retry_interval + 1) / 2 +
+	//	    (random() % client->config->retry_interval));
+	//tv.tv_usec = ((tv.tv_sec - cur_tv.tv_sec) > 1) ?
+	//		random() % 1000000 : cur_tv.tv_usec;
+	//add_timeout(&tv, state_init, client, 0, 0);
 	go_daemon ();
 }
 
