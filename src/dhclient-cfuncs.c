@@ -43,7 +43,6 @@
  * by Ted Lemon since then, so any mistakes you find are probably his
  * fault and not Elliot's.
  */
-
 #include "dhcpd.h"
 #include <syslog.h>
 #include <signal.h>
@@ -88,7 +87,7 @@ static const char copyright[] =
 "Copyright 2004-2014 Internet Systems Consortium.";
 static const char arr [] = "All rights reserved.";
 static const char message [] = "Internet Systems Consortium DHCP Client";
-static const char url [] = 
+static const char url [] =
 "For info, please visit https://www.isc.org/software/dhcp/";
 
 u_int16_t local_port = 0;
@@ -152,6 +151,33 @@ void init_defaults_config(dhclient_config *config) {
 }
 
 const char *MEM_FAILURE_STR = "Malloc failure\n";
+
+
+int do_dhclient_hibernate(char **err, dhclient_config *config)
+{
+	isc_result_t ret =  dhcp_set_control_state (server_hibernate, server_hibernate);
+	return ret;
+}
+
+int do_dhclient_awaken(char **err, dhclient_config *config)
+{
+	isc_result_t ret =  dhcp_set_control_state (server_awaken, server_awaken);
+	return ret;
+}
+
+int do_dhclient_release(char **err, dhclient_config *config)
+{
+	struct interface_info *ip;
+	struct client_state *client;
+	int ret = 0;
+	for (ip = config->interfaces ; ip ; ip = ip->next) {
+		for (client = ip->client ; client ;
+		     client = client->next) {
+				do_release(client);
+		}
+	}
+	return ret;
+}
 
 // returns 0 on now error
 int do_dhclient_request(char **err, dhclient_config *config)
@@ -1322,7 +1348,7 @@ void bind_lease (client)
 
 	/* Run the client script with the new parameters. */
 	script_init(client, (client->state == S_REQUESTING ? "BOUND" :
-			     (client->state == S_RENEWING ? "RENEW" : 
+			     (client->state == S_RENEWING ? "RENEW" :
 			      (client->state == S_REBOOTING ? "REBOOT" :
 			       "REBIND"))),
 		    client->new->medium);
@@ -1449,6 +1475,9 @@ void state_stop (cpp)
 			script_write_params(client, "alias_", client->alias);
 		script_go(client);
 	}
+
+	//TODO - add callback
+	submit_hibernate_complete_to_v8();
 }
 
 int commit_leases ()
@@ -1636,6 +1665,10 @@ void dhcpoffer (packet)
 
 	/* If we're not receptive to an offer right now, or if the offer
 	   has an unrecognizable transaction id, then just drop it. */
+	log_debug ("state = %d", client -> state);
+	log_debug ("packet -> interface -> hw_address.hlen = %d", packet -> interface -> hw_address.hlen);
+	log_debug ("packet -> raw -> hlen = %d", packet -> raw -> hlen);
+	log_debug ("S_SELECTING = %d", S_SELECTING);
 	if (!client ||
 	    client -> state != S_SELECTING ||
 	    (packet -> interface -> hw_address.hlen - 1 !=
@@ -1781,7 +1814,7 @@ struct client_lease *packet_to_lease (packet, client)
 	lease->next_srv_addr.len = sizeof(packet->raw->siaddr);
 	memcpy(lease->next_srv_addr.iabuf, &packet->raw->siaddr,
 	       lease->next_srv_addr.len);
-	
+
 	memset(&data, 0, sizeof(data));
 
 	if (client -> config -> vendor_space_name) {
@@ -4275,6 +4308,8 @@ void do_release(client)
 	cancel_timeout (send_request, client);
 	cancel_timeout (state_reboot, client);
 	client -> state = S_STOPPED;
+
+	submit_release_complete_to_v8();
 }
 
 int dhclient_interface_shutdown_hook (struct interface_info *interface)
@@ -4454,7 +4489,7 @@ client_dns_remove(struct client_state *client,
 		ddns_cancel(client->ddns_cb, MDL);
 		client->ddns_cb = NULL;
 	}
-	
+
 	ddns_cb = ddns_cb_alloc(MDL);
 	if (ddns_cb != NULL) {
 		ddns_cb->address = *addr;
@@ -4998,7 +5033,7 @@ static int check_option_values(struct universe *universe,
 static void
 add_reject(struct packet *packet) {
 	struct iaddrmatchlist *list;
-	
+
 	list = dmalloc(sizeof(struct iaddrmatchlist), MDL);
 	if (!list)
 		log_fatal ("no memory for reject list!");
