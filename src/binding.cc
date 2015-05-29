@@ -498,14 +498,15 @@ void NodeDhclient::dhcp_thread(void *d) {
 
 	while(!shutdown) {
 		if(self->dhcp_thread_queue.removeOrBlock(work)) {
-			DBG_OUT("have work: %p code: %d\n",work, work->cmdcode);
 			switch(work->cmdcode) {
 			case SHUTDOWN:
+				DBG_OUT("have work: %p code: SHUTDOWN\n",work, work->cmdcode);
 				shutdown = true;
 				shutdown_cmd = work;
 				shutdown_cmd->v8code = SHUTDOWN_COMPLETE;
 				break;
 			case DISCOVER_REQUEST:
+				DBG_OUT("have work: %p code: DISCOVER_REQUEST\n",work, work->cmdcode);
 				{
 					char *errstr = NULL;
 					//int ret = do_dhclient_request(&errstr, &self->_config);
@@ -526,24 +527,27 @@ void NodeDhclient::dhcp_thread(void *d) {
 				break;
 
 			case HIBERNATE:
+				DBG_OUT("have work: %p code: HIBERNATE\n",work, work->cmdcode);
 				control_cmd = work;
-				ret = do_dhclient_hibernate(&errstr, &self->_config);
 				control_cmd->v8code = HIBERNATE_COMPLETE;
-				// submitted to master dhcp_thread when completed
+				ret = do_dhclient_hibernate(&errstr, &self->_config);
+				if(!ret) self->submitToV8(control_cmd);
 				break;
 
 			case AWAKEN:
+				DBG_OUT("have work: %p code: AWAKEN\n",work, work->cmdcode);
 				control_cmd = work;
-				ret = do_dhclient_awaken(&errstr, &self->_config);
 				control_cmd->v8code = AWAKEN_COMPLETE;
-				self->submitToV8(control_cmd);
+				ret = do_dhclient_awaken(&errstr, &self->_config);
+				if(!ret) self->submitToV8(control_cmd);
 				break;
 
 			case RELEASE:
+				DBG_OUT("have work: %p code: RELEASE\n",work, work->cmdcode);
 				control_cmd = work;
-				ret = do_dhclient_release(&errstr, &self->_config);
 				control_cmd->v8code = RELEASE_COMPLETE;
-				//self->submitToV8(control_cmd);
+				ret = do_dhclient_release(&errstr, &self->_config);
+				if(!ret) self->submitToV8(control_cmd);
 				break;
 
 			default:
@@ -587,6 +591,88 @@ void NodeDhclient::dhcp_worker_thread(void *d) {
 		// 	work->v8code = GENERAL_ERROR;
 		// work->err.setError(ret, errstr);
 		if(errstr) ::free(errstr);
+	}
+}
+
+
+// execute in the V8 thread
+// allows callbacks, etc. to happen
+void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
+ //   SixLBR::control_event *ev = (SixLBR::control_event *) handle->data;
+
+	NodeDhclient::workReq *work;
+
+	NodeDhclient *dhclient = (NodeDhclient *) handle->data;
+
+	const unsigned argc = 2;
+	Local<Value> argv[argc];
+
+	while(dhclient->v8_cmd_queue.remove(work)) {
+		switch(work->v8code) {
+		case RECORD_NEW_LEASE:
+			DBG_OUT("completing work code = RECORD_NEW_LEASE\n");
+			{
+				// call leaseLog callback
+				if(!dhclient->leaseCallback.IsEmpty()) {
+					argv[0] = String::New(work->_backing,work->len);
+					dhclient->leaseCallback->Call(Context::GetCurrent()->Global(),1,argv);
+				} else {
+					ERROR_OUT("No leaseCallback set! dump: %s\n", work->_backing);
+				}
+				delete work;
+			}
+			break;
+		case BAD_CONFIG:
+		case GENERAL_ERROR:
+			DBG_OUT("completing work code = GENERAL_ERROR\n");
+			if(work->err.hasErr()) {
+				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+			} else {
+				ERROR_OUT("toV8_control saw error - but no error info.");
+			}
+		case HIBERNATE_COMPLETE:
+		case AWAKEN_COMPLETE:
+		case RELEASE_COMPLETE:
+			DBG_OUT("complete\n");
+			if(work->err.hasErr()) {
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,NULL);
+			} else {
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+			}
+			break;
+		case SHUTDOWN_COMPLETE:
+			DBG_OUT("completing work code = SHUTDOWN_COMPLETE\n");
+			if(work->err.hasErr()) {
+				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+			} else {
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+			}
+			break;
+		case NEWADDRESS:
+			DBG_OUT("completing work code = NEWADDRESS\n");
+			if(!work->onCompleteCB.IsEmpty()) {
+				if(work->err.hasErr()) {
+//					argv[1] =  Local<Value>::New(Null());
+					argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+					if(!work->onCompleteCB.IsEmpty())
+						work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+				} else {
+					// TODO make object to pass in...
+					if(!work->onCompleteCB.IsEmpty())
+						work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+				}
+			}
+			break;
+		default:
+			DBG_OUT("Unhandled v8code: 0x%x\n", work->v8code);
+		}
 	}
 }
 
@@ -954,76 +1040,6 @@ Handle<Value> NodeDhclient::Release(const Arguments& args) {
 	}
 
 	return scope.Close(Undefined());
-}
-
-
-// execute in the V8 thread
-// allows callbacks, etc. to happen
-void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
- //   SixLBR::control_event *ev = (SixLBR::control_event *) handle->data;
-
-	NodeDhclient::workReq *work;
-
-	NodeDhclient *dhclient = (NodeDhclient *) handle->data;
-
-	const unsigned argc = 2;
-	Local<Value> argv[argc];
-
-	while(dhclient->v8_cmd_queue.remove(work)) {
-
-		switch(work->v8code) {
-		case RECORD_NEW_LEASE:
-		{
-			// call leaseLog callback
-			if(!dhclient->leaseCallback.IsEmpty()) {
-				argv[0] = String::New(work->_backing,work->len);
-				dhclient->leaseCallback->Call(Context::GetCurrent()->Global(),1,argv);
-			} else {
-				ERROR_OUT("No leaseCallback set! dump: %s\n", work->_backing);
-			}
-			delete work;
-		}
-			break;
-		case BAD_CONFIG:
-		case GENERAL_ERROR:
-			if(work->err.hasErr()) {
-				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
-			} else {
-				ERROR_OUT("toV8_control saw error - but no error info.");
-			}
-		case HIBERNATE_COMPLETE:
-		case AWAKEN_COMPLETE:
-		case RELEASE_COMPLETE:
-		case SHUTDOWN_COMPLETE:
-			if(work->err.hasErr()) {
-				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
-			} else {
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
-			}
-			break;
-		case NEWADDRESS:
-			if(!work->onCompleteCB.IsEmpty()) {
-				if(work->err.hasErr()) {
-//					argv[1] =  Local<Value>::New(Null());
-					argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-					if(!work->onCompleteCB.IsEmpty())
-						work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
-				} else {
-					// TODO make object to pass in...
-					if(!work->onCompleteCB.IsEmpty())
-						work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
-				}
-			}
-			break;
-		default:
-			DBG_OUT("Unhandled v8code: 0x%x\n", work->v8code);
-		}
-	}
 }
 
 

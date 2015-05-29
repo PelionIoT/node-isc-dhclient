@@ -176,7 +176,7 @@ int do_dhclient_release(char **err, dhclient_config *config)
 				do_release(client);
 		}
 	}
-	return ret;
+	return ISC_R_SUCCESS;
 }
 
 // returns 0 on now error
@@ -1475,9 +1475,6 @@ void state_stop (cpp)
 			script_write_params(client, "alias_", client->alias);
 		script_go(client);
 	}
-
-	//TODO - add callback
-	submit_hibernate_complete_to_v8();
 }
 
 int commit_leases ()
@@ -1665,10 +1662,6 @@ void dhcpoffer (packet)
 
 	/* If we're not receptive to an offer right now, or if the offer
 	   has an unrecognizable transaction id, then just drop it. */
-	log_debug ("state = %d", client -> state);
-	log_debug ("packet -> interface -> hw_address.hlen = %d", packet -> interface -> hw_address.hlen);
-	log_debug ("packet -> raw -> hlen = %d", packet -> raw -> hlen);
-	log_debug ("S_SELECTING = %d", S_SELECTING);
 	if (!client ||
 	    client -> state != S_SELECTING ||
 	    (packet -> interface -> hw_address.hlen - 1 !=
@@ -2199,19 +2192,17 @@ void state_panic (cpp)
 		exit (2);
 	}
 
-	log_info ("No working leases in persistent database - continuing.");
+	log_info ("No working leases in persistent database - sleeping.");
 	script_init (client, "FAIL", (struct string_list *)0);
 	if (client -> alias)
 		script_write_params (client, "alias_", client -> alias);
 	script_go (client);
-	client -> state = S_INIT;
-	state_init(client);
 
-	//tv.tv_sec = cur_tv.tv_sec + ((client->config->retry_interval + 1) / 2 +
-	//	    (random() % client->config->retry_interval));
-	//tv.tv_usec = ((tv.tv_sec - cur_tv.tv_sec) > 1) ?
-	//		random() % 1000000 : cur_tv.tv_usec;
-	//add_timeout(&tv, state_init, client, 0, 0);
+	tv.tv_sec = cur_tv.tv_sec + ((client->config->retry_interval + 1) / 2 +
+		    (random() % client->config->retry_interval));
+	tv.tv_usec = ((tv.tv_sec - cur_tv.tv_sec) > 1) ?
+			random() % 1000000 : cur_tv.tv_usec;
+	add_timeout(&tv, state_init, client, 0, 0);
 	go_daemon ();
 }
 
@@ -4308,8 +4299,6 @@ void do_release(client)
 	cancel_timeout (send_request, client);
 	cancel_timeout (state_reboot, client);
 	client -> state = S_STOPPED;
-
-	submit_release_complete_to_v8();
 }
 
 int dhclient_interface_shutdown_hook (struct interface_info *interface)
