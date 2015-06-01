@@ -87,7 +87,8 @@
           "deps/twlib/include",
           "deps/isc-dhcp/bind/include",
           "deps/isc-dhcp/includes",
-          "deps/isc-dhcp"
+          "deps/isc-dhcp",
+          "deps/isc-dhcp/bind/bind-expanded-tar"
       ],
 
       "cflags": [
@@ -96,7 +97,7 @@
         "-fPIC",
 #        "-E", # for debugging #defines
         "-I../src",
-#        "-I../deps/isc-dhcp/bind/include",
+        "-I../deps/isc-dhcp/bind/include",
 
 
 		"-DDHCPv6=1",
@@ -129,7 +130,8 @@
             "Debug" : {
               	"defines" : [ "linux", "ERRCMN_DEBUG_BUILD", "NODE_ISCDHCP_DEBUG" ],
               	"cflags" : [
-              	    "-DDEBUG=1"
+              	    "-DDEBUG=1",
+                    "-D_GNU_SOURCE"
               	],
            		"ldflags" : [
             		"-L../deps/isc-dhcp/bind/lib",
