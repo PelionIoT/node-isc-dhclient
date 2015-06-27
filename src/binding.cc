@@ -181,10 +181,6 @@ if(cfield) o->Set(String::New(_k),Boolean::New(true)); else o->Set(String::New(_
 
 
 
-
-
-
-
 #define MAX_COMMAND_QUEUE 100
 
 
@@ -193,8 +189,8 @@ public:
 	enum work_code {
 		DISCOVER_REQUEST,
 		RELEASE,
-		RELEASE_RE_REQUEST,
-		RENEW,
+		HIBERNATE,
+		AWAKEN,
 		SHUTDOWN,
 		NO_WORK
 	};
@@ -207,7 +203,9 @@ public:
 		// a lease was acquired, but not necessarily a new address
 		// (correspond to what would go in /var/lib/dhcp/dhclient.leases)
 		RECORD_NEW_LEASE,
-
+		HIBERNATE_COMPLETE,
+		AWAKEN_COMPLETE,
+		RELEASE_COMPLETE,
 		SHUTDOWN_COMPLETE,
 		BAD_CONFIG,
 		GENERAL_ERROR
@@ -284,6 +282,7 @@ protected:
 	uv_cond_t _start_cond;
 	uv_thread_t _dhcp_thread;
 	static void dhcp_thread(void *d);
+	static void dhcp_worker_thread(void *d);
 	bool threadUp;
 	v8::Persistent<Function> leaseCallback;
 
@@ -347,6 +346,9 @@ public:
 	static Handle<Value> Shutdown(const Arguments& args);
 
 	static Handle<Value> RequestLease(const Arguments& args);
+	static Handle<Value> Hibernate(const Arguments& args);
+	static Handle<Value> Awaken(const Arguments& args);
+	static Handle<Value> Release(const Arguments& args);
 	static Handle<Value> SetLeaseCallback(const Arguments& args);
 	static Handle<Value> NewClient(const Arguments& args);
 
@@ -415,6 +417,9 @@ public:
 		// Prototype
 //		tpl->PrototypeTemplate()->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
 //		tpl->PrototypeTemplate()->Set(String::NewSymbol("stop"), FunctionTemplate::New(Stop)->GetFunction());
+		tpl->PrototypeTemplate()->Set(String::NewSymbol("hibernate"), FunctionTemplate::New(Hibernate)->GetFunction());
+		tpl->PrototypeTemplate()->Set(String::NewSymbol("awaken"), FunctionTemplate::New(Awaken)->GetFunction());
+		tpl->PrototypeTemplate()->Set(String::NewSymbol("release"), FunctionTemplate::New(Release)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("requestLease"), FunctionTemplate::New(RequestLease)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("_setLeaseCallback"), FunctionTemplate::New(SetLeaseCallback)->GetFunction());
 
@@ -447,6 +452,9 @@ public:
 
 	// external friend functions - interconnect to regular dhclient C code
 	friend int submit_lease_to_v8(char *json);
+	friend int submit_hibernate_complete_to_v8(void);
+	friend int submit_awaken_complete_to_v8(void);
+	friend int submit_release_complete_to_v8(void);
 
 protected:
 
@@ -460,9 +468,12 @@ protected:
 	}
 };
 
+
+
 // TLS var for use with static functions called from
 // standard ISC DHCP code
 __thread NodeDhclient *nodeClientTLS; // init is handled by dhcp_thread()
+__thread NodeDhclient *nodeClientWorkerTLS; // init is handled by dhcp_worker_thread()
 
 bool NodeDhclient::submitToV8ControlCommand(NodeDhclient::workReq *ev) {
 	assert(nodeClientTLS);
@@ -475,27 +486,35 @@ void NodeDhclient::dhcp_thread(void *d) {
 	NodeDhclient::workReq *work = NULL;
 	NodeDhclient *self = (NodeDhclient *) d;
 	nodeClientTLS = (NodeDhclient *) d;  // assign object value to TLS var also
+
 	self->sigThreadUp();
 	bool shutdown = false;
 
 	NodeDhclient::workReq *shutdown_cmd = NULL;
+	NodeDhclient::workReq *control_cmd = NULL;
+	char *errstr = NULL;
+	int ret;
+	uv_thread_t _dhcp_worker_thread;
 
 	while(!shutdown) {
 		if(self->dhcp_thread_queue.removeOrBlock(work)) {
-			DBG_OUT("have work: %p\n",work);
 			switch(work->cmdcode) {
 			case SHUTDOWN:
+				DBG_OUT("have work: %p code: SHUTDOWN\n",work, work->cmdcode);
 				shutdown = true;
 				shutdown_cmd = work;
 				shutdown_cmd->v8code = SHUTDOWN_COMPLETE;
 				break;
 			case DISCOVER_REQUEST:
+				DBG_OUT("have work: %p code: DISCOVER_REQUEST\n",work, work->cmdcode);
 				{
 					char *errstr = NULL;
-					int ret = do_dhclient_request(&errstr, &self->_config);
+					//int ret = do_dhclient_request(&errstr, &self->_config);
+
+					ret = uv_thread_create(&_dhcp_worker_thread,dhcp_worker_thread,d); // start thread
 					if(ret != 0) {
 						DBG_OUT("Got error: do_dhclient_request() = %d\n",ret);
-// DHCLIENT_INVALID_CONFIG
+
 						if(ret == DHCLIENT_INVALID_CONFIG)
 							work->v8code = BAD_CONFIG;
 						else
@@ -505,6 +524,30 @@ void NodeDhclient::dhcp_thread(void *d) {
 					}
 				}
 				self->submitToV8(work);
+				break;
+
+			case HIBERNATE:
+				DBG_OUT("have work: %p code: HIBERNATE\n",work, work->cmdcode);
+				control_cmd = work;
+				control_cmd->v8code = HIBERNATE_COMPLETE;
+				ret = do_dhclient_hibernate(&errstr, &self->_config);
+				if(!ret) self->submitToV8(control_cmd);
+				break;
+
+			case AWAKEN:
+				DBG_OUT("have work: %p code: AWAKEN\n",work, work->cmdcode);
+				control_cmd = work;
+				control_cmd->v8code = AWAKEN_COMPLETE;
+				ret = do_dhclient_awaken(&errstr, &self->_config);
+				if(!ret) self->submitToV8(control_cmd);
+				break;
+
+			case RELEASE:
+				DBG_OUT("have work: %p code: RELEASE\n",work, work->cmdcode);
+				control_cmd = work;
+				control_cmd->v8code = RELEASE_COMPLETE;
+				ret = do_dhclient_release(&errstr, &self->_config);
+				if(!ret) self->submitToV8(control_cmd);
 				break;
 
 			default:
@@ -526,6 +569,166 @@ void NodeDhclient::dhcp_thread(void *d) {
 	self->sigThreadDown();
 	if(shutdown_cmd)
 		self->submitToV8(shutdown_cmd);
+}
+
+// static - thread runner
+void NodeDhclient::dhcp_worker_thread(void *d) {
+
+	NodeDhclient::workReq *shutdown_cmd = NULL;
+	NodeDhclient *self = (NodeDhclient *) d;
+	nodeClientWorkerTLS = (NodeDhclient *) d;  // assign object value to TLS var also
+
+	char *errstr = NULL;
+
+	int ret = do_dhclient_request(&errstr, &self->_config);
+	DBG_OUT("do_dhclient_request returned with rc = %d", ret);
+	if(ret != 0) {
+		DBG_OUT("Got error: do_dhclient_request() = %d\n",ret);
+
+		// if(ret == DHCLIENT_INVALID_CONFIG)
+		// 	work->v8code = BAD_CONFIG;
+		// else
+		// 	work->v8code = GENERAL_ERROR;
+		// work->err.setError(ret, errstr);
+		if(errstr) ::free(errstr);
+	}
+}
+
+
+// execute in the V8 thread
+// allows callbacks, etc. to happen
+void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
+ //   SixLBR::control_event *ev = (SixLBR::control_event *) handle->data;
+
+	NodeDhclient::workReq *work;
+
+	NodeDhclient *dhclient = (NodeDhclient *) handle->data;
+
+	const unsigned argc = 2;
+	Local<Value> argv[argc];
+
+	while(dhclient->v8_cmd_queue.remove(work)) {
+		switch(work->v8code) {
+		case RECORD_NEW_LEASE:
+			DBG_OUT("completing work code = RECORD_NEW_LEASE\n");
+			{
+				// call leaseLog callback
+				if(!dhclient->leaseCallback.IsEmpty()) {
+					argv[0] = String::New(work->_backing,work->len);
+					dhclient->leaseCallback->Call(Context::GetCurrent()->Global(),1,argv);
+				} else {
+					ERROR_OUT("No leaseCallback set! dump: %s\n", work->_backing);
+				}
+				delete work;
+			}
+			break;
+		case BAD_CONFIG:
+		case GENERAL_ERROR:
+			DBG_OUT("completing work code = GENERAL_ERROR\n");
+			if(work->err.hasErr()) {
+				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+			} else {
+				ERROR_OUT("toV8_control saw error - but no error info.");
+			}
+		case HIBERNATE_COMPLETE:
+		case AWAKEN_COMPLETE:
+		case RELEASE_COMPLETE:
+			DBG_OUT("complete\n");
+			if(work->err.hasErr()) {
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,NULL);
+			} else {
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+			}
+			break;
+		case SHUTDOWN_COMPLETE:
+			DBG_OUT("completing work code = SHUTDOWN_COMPLETE\n");
+			if(work->err.hasErr()) {
+				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+			} else {
+				if(!work->onCompleteCB.IsEmpty())
+					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+			}
+			break;
+		case NEWADDRESS:
+			DBG_OUT("completing work code = NEWADDRESS\n");
+			if(!work->onCompleteCB.IsEmpty()) {
+				if(work->err.hasErr()) {
+//					argv[1] =  Local<Value>::New(Null());
+					argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
+					if(!work->onCompleteCB.IsEmpty())
+						work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+				} else {
+					// TODO make object to pass in...
+					if(!work->onCompleteCB.IsEmpty())
+						work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+				}
+			}
+			break;
+		default:
+			DBG_OUT("Unhandled v8code: 0x%x\n", work->v8code);
+		}
+	}
+}
+
+
+int submit_lease_to_v8(char *json) {
+	if(json) {
+		assert(nodeClientWorkerTLS);
+
+		NodeDhclient::workReq *work = NodeDhclient::workReq::createDhcpOriginatedWork(nodeClientWorkerTLS,NodeDhclient::RECORD_NEW_LEASE);
+		work->_backing = json;
+		work->len = strlen(json)+1;
+		if(nodeClientWorkerTLS->submitToV8(work)) {
+			return 1;
+		} else {
+			ERROR_OUT("Failed to add event to queue: v8_cmd_queue\n");
+			return 0;
+		}
+	}
+	return 0;
+}
+
+
+int submit_hibernate_complete_to_v8(void) {
+	assert(nodeClientTLS);
+
+	NodeDhclient::workReq *work = NodeDhclient::workReq::createDhcpOriginatedWork(nodeClientTLS,NodeDhclient::HIBERNATE_COMPLETE);
+	if(nodeClientTLS->submitToV8(work)) {
+		return 1;
+	} else {
+		ERROR_OUT("Failed to add event to queue: v8_cmd_queue\n");
+		return 0;
+	}
+}
+
+int submit_awaken_complete_to_v8(void) {
+	assert(nodeClientTLS);
+
+	NodeDhclient::workReq *work = NodeDhclient::workReq::createDhcpOriginatedWork(nodeClientTLS,NodeDhclient::AWAKEN_COMPLETE);
+	if(nodeClientTLS->submitToV8(work)) {
+		return 1;
+	} else {
+		ERROR_OUT("Failed to add event to queue: v8_cmd_queue\n");
+		return 0;
+	}
+}
+
+int submit_release_complete_to_v8(void) {
+	assert(nodeClientTLS);
+
+	NodeDhclient::workReq *work = NodeDhclient::workReq::createDhcpOriginatedWork(nodeClientTLS,NodeDhclient::RELEASE_COMPLETE);
+	if(nodeClientTLS->submitToV8(work)) {
+		return 1;
+	} else {
+		ERROR_OUT("Failed to add event to queue: v8_cmd_queue\n");
+		return 0;
+	}
 }
 
 Handle<Value> NodeDhclient::NewClient(const Arguments& args) {
@@ -740,92 +943,105 @@ Handle<Value> NodeDhclient::RequestLease(const Arguments& args) {
 	return scope.Close(Undefined());
 }
 
+Handle<Value> NodeDhclient::Hibernate(const Arguments& args) {
+	HandleScope scope;
+
+	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+
+	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::HIBERNATE);
+	DBG_OUT("created work: %p\n",req);
 
 
-// execute in the V8 thread
-// allows callbacks, etc. to happen
-void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
- //   SixLBR::control_event *ev = (SixLBR::control_event *) handle->data;
-
-	NodeDhclient::workReq *work;
-
-	NodeDhclient *dhclient = (NodeDhclient *) handle->data;
-
-	const unsigned argc = 2;
-	Local<Value> argv[argc];
-
-	while(dhclient->v8_cmd_queue.remove(work)) {
-
-		switch(work->v8code) {
-		case RECORD_NEW_LEASE:
-		{
-			// call leaseLog callback
-			if(!dhclient->leaseCallback.IsEmpty()) {
-				argv[0] = String::New(work->_backing,work->len);
-				dhclient->leaseCallback->Call(Context::GetCurrent()->Global(),1,argv);
-			} else {
-				ERROR_OUT("No leaseCallback set! dump: %s\n", work->_backing);
-			}
-			delete work;
+	if(!self->isThreadUp()) {
+		const unsigned argc = 2;
+		Local<Value> argv[argc];
+		_errcmn::err_ev err;
+		err.setError(DHCLIENT_EXEC_ERROR,"DHCP Thread not started.");
+		argv[0] =  Local<Value>::New(Null());
+		argv[1] = _errcmn::err_ev_to_JS(err)->ToObject();
+		if(args[0]->IsFunction())
+			Local<Function>::Cast(args[0])->Call(Context::GetCurrent()->Global(),2,argv);
+		else
+			ERROR_OUT("DHCP Thread not started. No callback provided.");
+	} else {
+		if(args.Length() > 0) {
+			 if(args[0]->IsFunction())
+					req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+			 else
+				 return ThrowException(Exception::TypeError(String::New("bad param: Hibernate([function]) -> Need [function]")));
 		}
-			break;
-		case BAD_CONFIG:
-		case GENERAL_ERROR:
-			if(work->err.hasErr()) {
-				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
-			} else {
-				ERROR_OUT("toV8_control saw error - but no error info.");
-			}
-		case SHUTDOWN_COMPLETE:
-			if(work->err.hasErr()) {
-				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
-			} else {
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
-			}
-			break;
-		case NEWADDRESS:
-			if(!work->onCompleteCB.IsEmpty()) {
-				if(work->err.hasErr()) {
-//					argv[1] =  Local<Value>::New(Null());
-					argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-					if(!work->onCompleteCB.IsEmpty())
-						work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
-				} else {
-					// TODO make object to pass in...
-					if(!work->onCompleteCB.IsEmpty())
-						work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
-				}
-			}
-			break;
-		default:
-			DBG_OUT("Unhandled v8code: 0x%x", work->v8code);
-		}
+		self->dhcp_thread_queue.add(req);
 	}
+
+	return scope.Close(Undefined());
 }
 
+Handle<Value> NodeDhclient::Awaken(const Arguments& args) {
+	HandleScope scope;
 
-int submit_lease_to_v8(char *json) {
-	if(json) {
-		assert(nodeClientTLS);
+	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+
+	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::AWAKEN);
+	DBG_OUT("created work: %p\n",req);
 
 
-		NodeDhclient::workReq *work = NodeDhclient::workReq::createDhcpOriginatedWork(nodeClientTLS,NodeDhclient::RECORD_NEW_LEASE);
-		work->_backing = json;
-		work->len = strlen(json)+1;
-		if(nodeClientTLS->submitToV8(work)) {
-			return 1;
-		} else {
-			ERROR_OUT("Failed to add event to queue: v8_cmd_queue\n");
-			return 0;
+	if(!self->isThreadUp()) {
+		const unsigned argc = 2;
+		Local<Value> argv[argc];
+		_errcmn::err_ev err;
+		err.setError(DHCLIENT_EXEC_ERROR,"DHCP Thread not started.");
+		argv[0] =  Local<Value>::New(Null());
+		argv[1] = _errcmn::err_ev_to_JS(err)->ToObject();
+		if(args[0]->IsFunction())
+			Local<Function>::Cast(args[0])->Call(Context::GetCurrent()->Global(),2,argv);
+		else
+			ERROR_OUT("DHCP Thread not started. No callback provided.");
+	} else {
+		if(args.Length() > 0) {
+			 if(args[0]->IsFunction())
+					req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+			 else
+				 return ThrowException(Exception::TypeError(String::New("bad param: awaken([function]) -> Need [function]")));
 		}
+		self->dhcp_thread_queue.add(req);
 	}
-	return 0;
+
+	return scope.Close(Undefined());
 }
+
+Handle<Value> NodeDhclient::Release(const Arguments& args) {
+	HandleScope scope;
+
+	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+
+	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::RELEASE);
+	DBG_OUT("created work: %p\n",req);
+
+
+	if(!self->isThreadUp()) {
+		const unsigned argc = 2;
+		Local<Value> argv[argc];
+		_errcmn::err_ev err;
+		err.setError(DHCLIENT_EXEC_ERROR,"DHCP Thread not started.");
+		argv[0] =  Local<Value>::New(Null());
+		argv[1] = _errcmn::err_ev_to_JS(err)->ToObject();
+		if(args[0]->IsFunction())
+			Local<Function>::Cast(args[0])->Call(Context::GetCurrent()->Global(),2,argv);
+		else
+			ERROR_OUT("DHCP Thread not started. No callback provided.");
+	} else {
+		if(args.Length() > 0) {
+			 if(args[0]->IsFunction())
+					req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+			 else
+				 return ThrowException(Exception::TypeError(String::New("bad param: release([function]) -> Need [function]")));
+		}
+		self->dhcp_thread_queue.add(req);
+	}
+
+	return scope.Close(Undefined());
+}
+
 
 //Persistent<Function> SixLBR::constructor;
 //

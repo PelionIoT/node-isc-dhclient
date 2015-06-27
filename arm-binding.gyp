@@ -87,8 +87,7 @@
           "deps/twlib/include",
           "deps/isc-dhcp/bind/include",
           "deps/isc-dhcp/includes",
-          "deps/isc-dhcp",
-          "deps/isc-dhcp/bind/bind-expanded-tar"
+          "deps/isc-dhcp"
       ],
 
       "cflags": [
@@ -97,10 +96,10 @@
         "-fPIC",
 #        "-E", # for debugging #defines
         "-I../src",
-        "-I../deps/isc-dhcp/bind/include",
-
-
-		"-DDHCPv6=1",
+        "-I../deps/isc-dhcp/dhcp-4.3.0b1/includes",
+#        "-I../deps/isc-dhcp/bind/include",
+        "-L../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib",
+        "-DDHCPv6=1",
         "-D_ERRCMN_ADD_CONSTS",
         "-DLOCALSTATEDIR=\"/NOVAR\"",
 
@@ -124,19 +123,22 @@
            		"ldflags" : [
             		"-L../deps/isc-dhcp/bind/lib",
             		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build
-            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive" 
+#            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive" 
+            		"-Wl,-whole-archive ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libdns.a ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libisc.a -Wl,-no-whole-archive" 
+#            		"-Wl,-whole-archive -ldns -lisc -Wl,-no-whole-archive" 
 		        ]
             },
             "Debug" : {
               	"defines" : [ "linux", "ERRCMN_DEBUG_BUILD", "NODE_ISCDHCP_DEBUG" ],
               	"cflags" : [
-              	    "-DDEBUG=1",
-                    "-D_GNU_SOURCE"
+              	    "-DDEBUG=1"
               	],
            		"ldflags" : [
             		"-L../deps/isc-dhcp/bind/lib",
             		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build
-            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive" 
+#            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive" 
+            		"-Wl,-whole-archive ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libdns.a ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libisc.a -Wl,-no-whole-archive" 
+#            		"-Wl,-whole-archive -ldns -lisc -Wl,-no-whole-archive" 
 		        ]
             }
           }

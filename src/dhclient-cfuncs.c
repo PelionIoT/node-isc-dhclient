@@ -43,7 +43,6 @@
  * by Ted Lemon since then, so any mistakes you find are probably his
  * fault and not Elliot's.
  */
-
 #include "dhcpd.h"
 #include <syslog.h>
 #include <signal.h>
@@ -152,6 +151,33 @@ void init_defaults_config(dhclient_config *config) {
 }
 
 const char *MEM_FAILURE_STR = "Malloc failure\n";
+
+
+int do_dhclient_hibernate(char **err, dhclient_config *config)
+{
+	isc_result_t ret =  dhcp_set_control_state (server_hibernate, server_hibernate);
+	return ret;
+}
+
+int do_dhclient_awaken(char **err, dhclient_config *config)
+{
+	isc_result_t ret =  dhcp_set_control_state (server_awaken, server_awaken);
+	return ret;
+}
+
+int do_dhclient_release(char **err, dhclient_config *config)
+{
+	struct interface_info *ip;
+	struct client_state *client;
+	int ret = 0;
+	for (ip = config->interfaces ; ip ; ip = ip->next) {
+		for (client = ip->client ; client ;
+		     client = client->next) {
+				do_release(client);
+		}
+	}
+	return ISC_R_SUCCESS;
+}
 
 // returns 0 on now error
 int do_dhclient_request(char **err, dhclient_config *config)
@@ -2172,7 +2198,7 @@ void state_panic (cpp)
 	if (client -> alias)
 		script_write_params (client, "alias_", client -> alias);
 	script_go (client);
-	client -> state = S_INIT;
+
 	tv.tv_sec = cur_tv.tv_sec + ((client->config->retry_interval + 1) / 2 +
 		    (random() % client->config->retry_interval));
 	tv.tv_usec = ((tv.tv_sec - cur_tv.tv_sec) > 1) ?
