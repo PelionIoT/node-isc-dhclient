@@ -88,7 +88,7 @@ static const char copyright[] =
 "Copyright 2004-2014 Internet Systems Consortium.";
 static const char arr [] = "All rights reserved.";
 static const char message [] = "Internet Systems Consortium DHCP Client";
-static const char url [] = 
+static const char url [] =
 "For info, please visit https://www.isc.org/software/dhcp/";
 
 u_int16_t local_port = 0;
@@ -1322,7 +1322,7 @@ void bind_lease (client)
 
 	/* Run the client script with the new parameters. */
 	script_init(client, (client->state == S_REQUESTING ? "BOUND" :
-			     (client->state == S_RENEWING ? "RENEW" : 
+			     (client->state == S_RENEWING ? "RENEW" :
 			      (client->state == S_REBOOTING ? "REBOOT" :
 			       "REBIND"))),
 		    client->new->medium);
@@ -1353,8 +1353,8 @@ void bind_lease (client)
 	}
 
 	/* Write out the new lease if it has been long enough. */
-	if (!client->last_write ||
-	    (cur_time - client->last_write) >= MIN_LEASE_WRITE)
+	if (!client->last_write)
+//		|| (cur_time - client->last_write) >= MIN_LEASE_WRITE)
 		write_client_lease_v8(client, client->new, 0, 1);
 
 	/* Replace the old active lease with the new one. */
@@ -1373,6 +1373,7 @@ void bind_lease (client)
 	log_info("bound to %s -- renewal in %ld seconds.",
 	      piaddr(client->active->address),
 	      (long)(client->active->renewal - cur_time));
+
 	client->state = S_BOUND;
 	reinitialize_interfaces();
 	go_daemon();
@@ -1781,7 +1782,7 @@ struct client_lease *packet_to_lease (packet, client)
 	lease->next_srv_addr.len = sizeof(packet->raw->siaddr);
 	memcpy(lease->next_srv_addr.iabuf, &packet->raw->siaddr,
 	       lease->next_srv_addr.len);
-	
+
 	memset(&data, 0, sizeof(data));
 
 	if (client -> config -> vendor_space_name) {
@@ -4452,7 +4453,7 @@ client_dns_remove(struct client_state *client,
 		ddns_cancel(client->ddns_cb, MDL);
 		client->ddns_cb = NULL;
 	}
-	
+
 	ddns_cb = ddns_cb_alloc(MDL);
 	if (ddns_cb != NULL) {
 		ddns_cb->address = *addr;
@@ -4996,7 +4997,7 @@ static int check_option_values(struct universe *universe,
 static void
 add_reject(struct packet *packet) {
 	struct iaddrmatchlist *list;
-	
+
 	list = dmalloc(sizeof(struct iaddrmatchlist), MDL);
 	if (!list)
 		log_fatal ("no memory for reject list!");
