@@ -1378,11 +1378,6 @@ void bind_lease (client)
 		}
 	}
 
-	/* Write out the new lease if it has been long enough. */
-	if (!client->last_write)
-//		|| (cur_time - client->last_write) >= MIN_LEASE_WRITE)
-		write_client_lease_v8(client, client->new, 0, 1);
-
 	/* Replace the old active lease with the new one. */
 	if (client->active)
 		destroy_client_lease(client->active);
@@ -1396,9 +1391,14 @@ void bind_lease (client)
 	// node-isc-dhclient: we aren't doing this - we just want to leave the thread...
 //	add_timeout(&tv, state_bound, client, 0, 0);
 
-	log_info("bound to %s -- renewal in %ld seconds.",
+	log_info("bind_lease: bound to %s -- renewal in %ld seconds.",
 	      piaddr(client->active->address),
 	      (long)(client->active->renewal - cur_time));
+
+	/* Write out the new lease if it has been long enough. */
+//	if (!client->last_write)
+//		|| (cur_time - client->last_write) >= MIN_LEASE_WRITE)
+	write_client_lease_v8(client, client->active, 1, 1);
 
 	client->state = S_BOUND;
 	reinitialize_interfaces();
@@ -2135,7 +2135,7 @@ void state_panic (cpp)
 			if (!script_go (client)) {
 			    if (cur_time < client -> active -> renewal) {
 				client -> state = S_BOUND;
-				log_info ("bound: renewal in %ld %s.",
+				log_info ("panic: bound: renewal in %ld %s.",
 					  (long)(client -> active -> renewal -
 						 cur_time), "seconds");
 				tv.tv_sec = client->active->renewal;
@@ -2143,10 +2143,12 @@ void state_panic (cpp)
 						    cur_time) > 1) ?
 						random() % 1000000 :
 						cur_tv.tv_usec;
+				write_client_lease_v8(client, client->active, 1, 1);
 				add_timeout(&tv, state_bound, client, 0, 0);
 			    } else {
 				client -> state = S_BOUND;
-				log_info ("bound: immediate renewal.");
+				log_info ("panic: bound: immediate renewal.");
+				write_client_lease_v8(client, client->active, 1, 1);
 				state_bound (client);
 			    }
 			    reinitialize_interfaces ();
@@ -3492,8 +3494,8 @@ int write_client_lease_v8 (client, lease, rewrite, makesure)
 
 	/* If the lease came from the config file, we don't need to stash
 	   a copy in the lease database. */
-	if (lease -> is_static)
-		return 1;
+	//	if (lease -> is_static)
+	//	return 1;
 
 //	if (leaseFile == NULL) {	/* XXX */
 //		leaseFile = fopen (path_dhclient_db, "w");
@@ -3634,7 +3636,7 @@ int write_client_lease_v8 (client, lease, rewrite, makesure)
 
 	// send event to v8
 
-
+	if(errors) log_error("errors writing lease = %d",errors);
 	return errors ? 0 : 1;
 }
 /* Variables holding name of script and file pointer for writing to
