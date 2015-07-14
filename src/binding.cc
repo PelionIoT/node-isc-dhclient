@@ -442,6 +442,8 @@ public:
 	{
 		init_defaults_config(&_config);
 
+                uv_cond_init(&_start_cond);
+                uv_mutex_init(&_control);
 		uv_async_init(uv_default_loop(), &_toV8_async, toV8_control);
 		// unref it - we don't want this to hold up an exit of node
 		// when the thread is running, it ->Ref() NodeDhclient, and this *should* prevent
