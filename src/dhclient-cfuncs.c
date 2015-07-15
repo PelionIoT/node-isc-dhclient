@@ -2133,6 +2133,8 @@ void state_panic (cpp)
 			   yet need renewal, go into BOUND state and
 			   timeout at the renewal time. */
 			if (!script_go (client)) {
+				write_client_lease_v8(client, client->new, 0, 1);
+
 			    if (cur_time < client -> active -> renewal) {
 				client -> state = S_BOUND;
 				log_info ("panic: bound: renewal in %ld %s.",
