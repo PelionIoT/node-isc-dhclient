@@ -1,5 +1,4 @@
 *.o
 /named
-*.c
 /Makefile
 /lwresd
