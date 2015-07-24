@@ -117,7 +117,7 @@
       "conditions": [
         [ 
           "OS=='linux'", {
-          "doit" : '<!(deps/install-deps.sh 2>&1 > install_deps.log)',  # doit means nothing - but this forces this script execute
+          "doit" : '<!(deps/install-deps.sh 2>&1 > /tmp/install_deps.log)',  # doit means nothing - but this forces this script execute
           "configurations" : {
             "Release" : {
 	      		"defines" : [ "linux" ],
