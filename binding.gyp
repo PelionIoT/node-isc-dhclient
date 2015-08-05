@@ -124,9 +124,9 @@
             "Release" : {
 	      		"defines" : [ "linux" ],
            		"ldflags" : [
-            		"-L../deps/isc-dhcp/bind/lib",
+            		"-L../deps/isc-dhcp/bind/lib -L../deps/jansson-2.7/lib",
             		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build
-            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive"
+            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a ../deps/jansson-2.7/lib/libjansson.a -Wl,-no-whole-archive"
 		        ]
             },
             "Debug" : {
