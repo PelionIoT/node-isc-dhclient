@@ -582,7 +582,7 @@ void NodeDhclient::dhcp_worker_thread(void *d) {
 
 	char *errstr = NULL;
 
-	int ret = do_dhclient_request(&errstr, &self->_config);
+	int ret = do_dhclient_request(&errstr, &self->_config, NULL);
 	DBG_OUT("do_dhclient_request returned with rc = %d", ret);
 	if(ret != 0) {
 		DBG_OUT("Got error: do_dhclient_request() = %d\n",ret);

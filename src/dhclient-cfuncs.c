@@ -51,6 +51,7 @@
 #include <sys/wait.h>
 #include <limits.h>
 #include <dns/result.h>
+#include <jansson.h>
 
 #include "dhclient-cfuncs.h"
 #include "overlay-clparse.h"
@@ -180,7 +181,7 @@ int do_dhclient_release(char **err, dhclient_config *config)
 }
 
 // returns 0 on now error
-int do_dhclient_request(char **err, dhclient_config *config)
+int do_dhclient_request(char **err, dhclient_config *config, const char* v8lease)
 {
 	int fd;
 	int i;
@@ -627,7 +628,9 @@ int do_dhclient_request(char **err, dhclient_config *config)
 	}
 
 	/* Parse the lease database. */
-	read_client_leases();
+	//read_client_leases();
+	set_current_lease( v8lease );
+
 
 	/* Rewrite the lease database... */
 	rewrite_client_leases();
@@ -869,6 +872,135 @@ static void usage()
 		  "[-lf lease-file]\n"
 		  "                [-pf pid-file] [--no-pid] [-e VAR=val]\n"
 		  "                [-sf script-file] [interface]");
+}
+
+void set_current_lease(const char* v8lease )
+{
+	struct client_lease *lease, *lp, *pl, *next;
+	struct interface_info *ip = (struct interface_info *)0;
+	struct client_state *client = (struct client_state *)0;
+
+	int is_static = 0;  // always dynamic for this application
+
+	// Allocate the the structure
+	lease = ((struct client_lease *)
+		 dmalloc (sizeof (struct client_lease), MDL));
+	if (!lease)
+		log_fatal ("no memory for lease.\n");
+	memset (lease, 0, sizeof *lease);
+	lease -> is_static = is_static;
+	if (!option_state_allocate (&lease -> options, MDL))
+		log_fatal ("no memory for lease options.\n");
+
+	parse_client_lease_v8declaration (v8lease, lease, &ip, &client);
+
+	/* If the lease declaration didn't include an interface
+	   declaration that we recognized, it's of no use to us. */
+	if (!ip) {
+		destroy_client_lease (lease);
+		return;
+	}
+
+	/* Make sure there's a client state structure... */
+	if (!ip -> client) {
+		make_client_state (&ip -> client);
+		ip -> client -> interface = ip;
+	}
+	if (!client)
+		client = ip -> client;
+
+	/* If this is an alias lease, it doesn't need to be sorted in. */
+	if (is_static == 2) {
+		ip -> client -> alias = lease;
+		return;
+	}
+
+	/* The new lease may supersede a lease that's not the
+	   active lease but is still on the lease list, so scan the
+	   lease list looking for a lease with the same address, and
+	   if we find it, toss it. */
+	pl = (struct client_lease *)0;
+	for (lp = client -> leases; lp; lp = next) {
+		next = lp -> next;
+		if (lp -> address.len == lease -> address.len &&
+		    !memcmp (lp -> address.iabuf, lease -> address.iabuf,
+			     lease -> address.len)) {
+			if (pl)
+				pl -> next = next;
+			else
+				client -> leases = next;
+			destroy_client_lease (lp);
+			break;
+		} else
+			pl = lp;
+	}
+
+	/* If this is a preloaded lease, just put it on the list of recorded
+	   leases - don't make it the active lease. */
+	if (is_static) {
+		lease -> next = client -> leases;
+		client -> leases = lease;
+		return;
+	}
+
+	/* The last lease in the lease file on a particular interface is
+	   the active lease for that interface.    Of course, we don't know
+	   what the last lease in the file is until we've parsed the whole
+	   file, so at this point, we assume that the lease we just parsed
+	   is the active lease for its interface.   If there's already
+	   an active lease for the interface, and this lease is for the same
+	   ip address, then we just toss the old active lease and replace
+	   it with this one.   If this lease is for a different address,
+	   then if the old active lease has expired, we dump it; if not,
+	   we put it on the list of leases for this interface which are
+	   still valid but no longer active. */
+	if (client -> active) {
+		if (client -> active -> expiry < cur_time)
+			destroy_client_lease (client -> active);
+		else if (client -> active -> address.len ==
+			 lease -> address.len &&
+			 !memcmp (client -> active -> address.iabuf,
+				  lease -> address.iabuf,
+				  lease -> address.len))
+			destroy_client_lease (client -> active);
+		else {
+			client -> active -> next = client -> leases;
+			client -> leases = client -> active;
+		}
+	}
+	client -> active = lease;
+}
+
+
+/* client-lease-declaration :==
+	{
+	BOOTP |
+	INTERFACE string |
+	FIXED_ADDR ip_address |
+	FILENAME string |
+	SERVER_NAME string |
+	OPTION option-decl |
+	RENEW time-decl |
+	REBIND time-decl |
+	EXPIRE time-decl |
+	KEY id
+	}
+*/
+void parse_client_lease_v8declaration (v8lease, lease, ipp, clientp)
+	const char* v8lease;
+	struct client_lease *lease;
+	struct interface_info **ipp;
+	struct client_state **clientp;
+{
+	int token;
+	const char *val;
+	struct interface_info *ip;
+	struct option_cache *oc;
+	struct client_state *client = (struct client_state *)0;
+
+	json_error_t json_err;
+	json_t* root = json_loads(v8lease, 0, &json_err);
+
 }
 
 void run_stateless(int exit_mode)

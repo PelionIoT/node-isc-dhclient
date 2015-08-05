@@ -56,7 +56,7 @@ isc_result_t read_client_conf ()
 	isc_result_t status;
 	unsigned code;
 
-        /* 
+        /*
          * TODO: LATER constant is very undescriptive. We should review it and
          * change it to something more descriptive or even better remove it
          * completely as it is currently not used.
@@ -294,7 +294,7 @@ void read_client_leases ()
 	end_parse (&cfile);
 }
 
-/* client-declaration :== 
+/* client-declaration :==
 	SEND option-decl |
 	DEFAULT option-decl |
 	SUPERSEDE option-decl |
@@ -347,7 +347,7 @@ void parse_client_statement (cfile, ip, config)
 			parse_semi (cfile);
 		}
 		return;
-		
+
 	      case KEY:
 		skip_token(&val, (unsigned *)0, cfile);
 		if (ip) {
@@ -494,7 +494,7 @@ void parse_client_statement (cfile, ip, config)
 			parse_warn (cfile, "expecting a policy type.");
 			skip_to_semi (cfile);
 			return;
-		} 
+		}
 		break;
 
 	      case OPTION:
@@ -622,7 +622,7 @@ void parse_client_statement (cfile, ip, config)
 			config -> omapi_port = tmp;
 		parse_semi (cfile);
 		return;
-		
+
 	      case DO_FORWARD_UPDATE:
 		skip_token(&val, (unsigned *)0, cfile);
 		token = next_token (&val, (unsigned *)0, cfile);
@@ -716,7 +716,7 @@ void parse_client_statement (cfile, ip, config)
 		strcpy (name, val);
 		parse_interface_declaration (cfile, config, name);
 		return;
-		
+
 	      case LEASE:
 		skip_token(&val, (unsigned *)0, cfile);
 		parse_client_lease_statement (cfile, 1);
@@ -1092,7 +1092,7 @@ void parse_client_lease_statement (cfile, is_static)
 		client -> leases = lease;
 		return;
 	}
-		
+
 	/* The last lease in the lease file on a particular interface is
 	   the active lease for that interface.    Of course, we don't know
 	   what the last lease in the file is until we've parsed the whole
@@ -2200,7 +2200,7 @@ void parse_reject_statement (cfile, config)
 				      "for reject statement");
 		    skip_to_semi(cfile);
 		    return;
-		} 
+		}
 
 		list = dmalloc(sizeof(struct iaddrmatchlist), MDL);
 		if (!list)
@@ -2217,7 +2217,7 @@ void parse_reject_statement (cfile, config)
 		parse_warn (cfile, "expecting semicolon.");
 		skip_to_semi (cfile);
 	}
-}	
+}
 
 /* allow-deny-keyword :== BOOTP
    			| BOOTING

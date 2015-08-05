@@ -147,7 +147,7 @@ struct node_dhclient_client_config {
 extern __thread dhclient_config *threadConfig;  // defined in dhclient-cfuncs.c
 
 extern void init_defaults_config(dhclient_config *config);
-extern int do_dhclient_request(char **errstr, dhclient_config *config);
+extern int do_dhclient_request(char **errstr, dhclient_config *config, const char* v8lease);
 extern int do_dhclient_hibernate(char **errstr, dhclient_config *config);
 extern int do_dhclient_awaken(char **errstr, dhclient_config *config);
 extern int do_dhclient_release(char **errstr, dhclient_config *config);

@@ -13,20 +13,33 @@ LOG=${DEPS_DIR}/../install_deps.log
 AUX_LIBS=${DEPS_DIR}/isc-dhcp/bind
 
 BIND_DIR=${DEPS_DIR}/isc-dhcp/bind
+JSON_DIR=${DEPS_DIR}/jansson-2.7
 
 BIND_SRC_DIR=${DEPS_DIR}/isc-dhcp/bind/bind-expanded-tar
 ISC_DIR=${DEPS_DIR}/isc-dhcp
 
 if [ "$1" == "rebuild" ]; then
 	REBUILD=1
-fi 
+fi
 
 touch $LOG
+
+if [ -e "${JSON_DIR}/lib/libjansson.a" ] && [ -z $REBUILD ]; then
+	echo "Jansson libraries already built."
+else
+	echo "Building jansson libraries"
+	pushd ${JSON_DIR}
+	./configure --prefix=${JSON_DIR}
+	make
+	make install
+	popd
+fi
+
 pushd $BIND_DIR
 
 if [ -e ${BIND_SRC_DIR}/Makefile ] && [ -z $REBUILD ]; then                  # ;
-	echo "Bind export libraries already configured"   
-else                                                       
+	echo "Bind export libraries already configured"
+else
 	echo "Configuring BIND Export libraries for DHCP."
 	mkdir -p build
 	rm -rf ./lib ./include ./configure.log ./build.log ./install.log
@@ -49,7 +62,7 @@ fi
 popd
 
 pushd $ISC_DIR
-	
+
 ./configure --prefix=${BIND_DIR}/build CFLAGS="-fPIC"  > ${BIND_DIR}/configure.log
 
 popd
