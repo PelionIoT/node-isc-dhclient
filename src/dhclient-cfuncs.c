@@ -148,6 +148,7 @@ void init_defaults_config(dhclient_config *config) {
 
 	config->config_options = NULL;
 	config->config_options_len = 0;
+	config->initial_leases = NULL;
 }
 
 const char *MEM_FAILURE_STR = "Malloc failure\n";
@@ -627,10 +628,10 @@ int do_dhclient_request(char **err, dhclient_config *config)
 	}
 
 	/* Parse the lease database. */
-	read_client_leases();
+	read_client_leases_buffer(config->initial_leases);
 
 	/* Rewrite the lease database... */
-	rewrite_client_leases();
+	//rewrite_client_leases();
 
 	/* XXX */
 /* 	config_counter(&snd_counter, &rcv_counter); */
@@ -5050,4 +5051,56 @@ add_reject(struct packet *packet) {
 	 * anymore.
 	 */
 	log_info("Server added to list of rejected servers.");
+}
+
+void read_client_leases_buffer (char* leases)
+{
+	isc_result_t status;
+	struct parse *cfile;
+	const char *val;
+	int token;
+
+	if(leases == NULL) return;
+
+	cfile = NULL;
+	status = new_parse(&cfile, -1,
+			    (char *) leases,
+			    strlen(leases),
+			    "_config.initial_leases", 0);
+	if (status != ISC_R_SUCCESS || cfile == NULL)
+		return;
+
+	do {
+		token = next_token (&val, (unsigned *)0, cfile);
+		if (token == END_OF_FILE)
+			break;
+
+		switch (token) {
+		      case DEFAULT_DUID:
+			parse_client_default_duid(cfile);
+			break;
+
+		      case LEASE:
+			parse_client_lease_statement(cfile, 0);
+			break;
+
+		      case LEASE6:
+			parse_client6_lease_statement(cfile);
+			break;
+
+		      default:
+			log_error ("Corrupt lease buffer - possible data loss!");
+			skip_to_semi (cfile);
+			break;
+		}
+	} while (1);
+
+	//end_parse (&cfile);
+	if (cfile->saved_state != NULL) {
+		dfree(cfile->saved_state, MDL);
+	}
+
+	dfree(cfile, MDL);
+	cfile = NULL;
+
 }

@@ -140,6 +140,11 @@ if(!val->IsUndefined() && val->IsString()) {\
 	if(cfield) free(cfield);\
 	v8::String::Utf8Value v8str(val);\
 	cfield = strdup(v8str.operator *()); } }
+#define V8_IFEXIST_SPRINT_CSTR(val, v8obj, v8field, fmt, cstr) { val = v8obj->Get(String::New(v8field));\
+if(!val->IsUndefined() && val->IsString()) {\
+	v8::String::Utf8Value v8str(val);\
+	cstr += sprintf(cstr, fmt, v8str.operator *());\
+	} }
 #define V8_IFEXIST_TO_INT_CAST(v8field,cfield,val,v8obj,typ) { val = v8obj->Get(String::New(v8field));\
 		if(!val->IsUndefined() && val->IsNumber()) cfield = (typ) val->ToInteger()->IntegerValue(); }
 #define V8_IFEXIST_TO_INT_CAST_THROWBOUNDS(v8field,cfield,val,v8obj,typ,lowbound,highbound) { val = v8obj->Get(String::New(v8field));\
@@ -342,6 +347,7 @@ public:
 
 	static Handle<Value> SetConfig(const Arguments& args);
 	static Handle<Value> GetConfig(const Arguments& args);
+	static Handle<Value> SetCurrentLease(const Arguments& args);
 	static Handle<Value> Start(const Arguments& args);
 	static Handle<Value> Shutdown(const Arguments& args);
 
@@ -423,6 +429,7 @@ public:
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("requestLease"), FunctionTemplate::New(RequestLease)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("_setLeaseCallback"), FunctionTemplate::New(SetLeaseCallback)->GetFunction());
 
+		tpl->PrototypeTemplate()->Set(String::NewSymbol("setCurrentLease"), FunctionTemplate::New(SetCurrentLease)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("setConfig"), FunctionTemplate::New(SetConfig)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("getConfig"), FunctionTemplate::New(GetConfig)->GetFunction());
 		tpl->PrototypeTemplate()->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
@@ -451,6 +458,9 @@ public:
 		// we also re-ref this handle as well then - b/c ->Ref() alone does not seem to work (?)
 		uv_unref((uv_handle_t *) &_toV8_async);
 	}
+
+	~NodeDhclient()	{ if(_config.initial_leases) free(_config.initial_leases); }
+
 
 	// external friend functions - interconnect to regular dhclient C code
 	friend int submit_lease_to_v8(char *json);
@@ -868,6 +878,51 @@ Handle<Value> NodeDhclient::SetConfig(const Arguments& args) {
 
 	return scope.Close(Undefined());
 }
+
+Handle<Value> NodeDhclient::SetCurrentLease(const Arguments& args) {
+	HandleScope scope;
+
+	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+
+	if(args.Length() > 0 && args[0]->IsObject()) {
+		char lease[MAX_LEASE_STR_SIZE];
+		memset(&lease,'\0', sizeof(lease));
+		Local<Object> o = args[0]->ToObject();
+		Local<Value> v;
+		char *ls = lease;
+
+		ls += sprintf(ls, "lease {\n");
+		V8_IFEXIST_SPRINT_CSTR(v, o, "interface", "  interface \"%s\";\n", ls)
+		V8_IFEXIST_SPRINT_CSTR(v, o, "fixed_address", "  fixed-address %s;\n", ls)
+
+
+		Local<Value> opts_val = o->Get(String::New("options"));
+		if(!opts_val->IsUndefined() && opts_val->IsObject()) {
+			Local<Object> opts = opts_val->ToObject();
+			V8_IFEXIST_SPRINT_CSTR(v, opts, "subnet-mask", "  option subnet-mask %s;\n", ls)
+			V8_IFEXIST_SPRINT_CSTR(v, opts, "dhcp-lease-time", "  option dhcp-lease-time %s;\n", ls)
+			V8_IFEXIST_SPRINT_CSTR(v, opts, "routers", "  option routers %s;\n", ls)
+			V8_IFEXIST_SPRINT_CSTR(v, opts, "dhcp-message-type", "  option dhcp-message-type %s;\n", ls)
+			V8_IFEXIST_SPRINT_CSTR(v, opts, "domain-name-servers", "  option domain-name-servers %s;\n", ls)
+			V8_IFEXIST_SPRINT_CSTR(v, opts, "dhcp-server-identifier", "  option dhcp-server-identifier %s;\n", ls)
+		}
+
+		V8_IFEXIST_SPRINT_CSTR(v, o, "renew", "  renew %s\n", ls)
+		V8_IFEXIST_SPRINT_CSTR(v, o, "rebind", "  rebind %s\n", ls)
+		V8_IFEXIST_SPRINT_CSTR(v, o, "expire", "  expire %s\n", ls)
+		sprintf(ls, "}\n");
+
+		if(obj->_config.initial_leases) free(obj->_config.initial_leases);
+		obj->_config.initial_leases = strdup(lease); // get's freed by
+	} else {
+		return ThrowException(Exception::TypeError(String::New("bad param: SetCurrentLease([object])")));
+	}
+
+	return scope.Close(Undefined());
+}
+
+
+
 
 Handle<Value> NodeDhclient::GetConfig(const Arguments& args) {
 	HandleScope scope;

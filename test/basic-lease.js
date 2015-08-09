@@ -18,13 +18,13 @@ conf.interfaces.push("eth0");
 //
 // do_forward_updates false;\
 
-conf.config_options = 
+conf.config_options =
 "timeout 60;\
 do-forward-updates false;\
 option rfc3442-classless-static-routes code 121 = array of unsigned integer 8;"
 client.setConfig(conf);
 
-console.log("conf: " + util.inspect(conf));
+//console.log("conf: " + util.inspect(conf));
 
 client.setLeaseCallback(function(lease) {
 	if(lease) {
@@ -36,6 +36,20 @@ client.setLeaseCallback(function(lease) {
 });
 
 client.start();
+
+var lease = { interface: 'eth0',
+  fixed_address: '10.0.0.8',
+  options:
+   { 'subnet-mask': '255.255.254.0',
+     routers: '10.0.0.1',
+     'dhcp-lease-time': '86400',
+     'dhcp-message-type': '5',
+     'domain-name-servers': '10.0.0.1',
+     'dhcp-server-identifier': '10.0.0.1' },
+  renew: '1 2015/08/10 04:49:45;',
+  rebind: '1 2015/08/10 15:08:44;',
+  expire: '1 2015/08/10 18:08:44;' };
+client.setCurrentLease(lease);
 
 client.requestLease(function(err,results){
 	console.log("in callback:");
@@ -49,5 +63,5 @@ client.requestLease(function(err,results){
 			console.log("Err on shutdown: " + util.inspect(err));
 		else
 			console.log("dhclient shutdown complete.");
-	});	
+	});
 });

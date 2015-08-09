@@ -142,6 +142,7 @@ struct node_dhclient_client_config {
 //		struct client_config;
 		char *config_options;
 		int config_options_len;
+		char* initial_leases;
 	} dhclient_config;
 
 extern __thread dhclient_config *threadConfig;  // defined in dhclient-cfuncs.c
