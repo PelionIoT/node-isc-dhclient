@@ -303,7 +303,16 @@ protected:
 	//		printf("(pre-up) HANDLE COUNT: %d\n", ((uv_handle_t *) &this->_start_cond)->loop->active_handles);
 //			this->Ref();
 	//		uv_ref((uv_handle_t *)&this->_start_cond); // don't uv_ref uv_default_loop anymore - see this: https://groups.google.com/forum/#!topic/nodejs/530YS0RB42w
+#if UV_VERSION_MAJOR > 0
 			uv_thread_create(&this->_dhcp_thread,dhcp_thread,this); // start thread
+			// FIXME in newer versions libuv returns something different
+#else
+			int r = uv_thread_create(&this->_dhcp_thread,dhcp_thread,this); // start thread
+			if (r < 0) {  // old libuv returns -1 on failure
+				ERROR_OUT("NON-RECOVERABLE: failed to create dhcp thread.\n");
+				return false;
+			}
+#endif
 			uv_mutex_lock(&_control);
 			uv_cond_wait(&_start_cond, &_control); // wait for thread's start...
 			ret = threadUp;
