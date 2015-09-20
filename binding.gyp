@@ -94,7 +94,6 @@
       "cflags": [
         "-Wall",
         "-std=c++11",
-        "-ggdb", # for debugging 
         "-fPIC",
 #        "-E", # for debugging #defines
         "-I../src",
@@ -132,7 +131,8 @@
               	"defines" : [ "linux", "ERRCMN_DEBUG_BUILD", "NODE_ISCDHCP_DEBUG" ],
               	"cflags" : [
               	    "-DDEBUG=1",
-                    "-D_GNU_SOURCE"
+                    "-D_GNU_SOURCE",
+                    "-ggdb" # for debugging
               	],
            		"ldflags" : [
             		"-L../deps/isc-dhcp/bind/lib",
