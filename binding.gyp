@@ -94,6 +94,7 @@
       "cflags": [
         "-Wall",
         "-std=c++11",
+        "-ggdb", # for debugging 
         "-fPIC",
 #        "-E", # for debugging #defines
         "-I../src",
