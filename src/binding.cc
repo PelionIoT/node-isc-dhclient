@@ -303,6 +303,10 @@ protected:
 	//		printf("(pre-up) HANDLE COUNT: %d\n", ((uv_handle_t *) &this->_start_cond)->loop->active_handles);
 //			this->Ref();
 	//		uv_ref((uv_handle_t *)&this->_start_cond); // don't uv_ref uv_default_loop anymore - see this: https://groups.google.com/forum/#!topic/nodejs/530YS0RB42w
+
+			//Yash: Fix for relay-kernel 4.2 - First, lock the mutex and then start the thread
+			//otherwise the signal will be lost and the main thread will hang indefinitely 
+			uv_mutex_lock(&_control);
 #if UV_VERSION_MAJOR > 0
 			uv_thread_create(&this->_dhcp_thread,dhcp_thread,this); // start thread
 			// FIXME in newer versions libuv returns something different
@@ -313,7 +317,6 @@ protected:
 				return false;
 			}
 #endif
-			uv_mutex_lock(&_control);
 			uv_cond_wait(&_start_cond, &_control); // wait for thread's start...
 			ret = threadUp;
 			uv_ref((uv_handle_t *) &_toV8_async);
