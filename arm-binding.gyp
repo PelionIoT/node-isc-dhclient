@@ -93,10 +93,13 @@
       "cflags": [
         "-Wall",
         "-std=c++11",
+#	"-ggdb",
         "-fPIC",
 #        "-E", # for debugging #defines
         "-I../src",
         "-I../deps/isc-dhcp/dhcp-4.3.0b1/includes",
+        "-I../deps/isc-dhcp/dhcp-4.3.0b1/include",
+        "-I../deps/isc-dhcp/dhcp-4.3.0b1/bind/include",
 #        "-I../deps/isc-dhcp/bind/include",
         "-L../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib",
         "-DDHCPv6=1",
@@ -135,6 +138,7 @@
               	],
            		"ldflags" : [
             		"-L../deps/isc-dhcp/bind/lib",
+	                "-ggdb",
             		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build
 #            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive" 
             		"-Wl,-whole-archive ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libdns.a ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libisc.a -Wl,-no-whole-archive" 
