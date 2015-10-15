@@ -19,13 +19,8 @@
 extern const char *MEM_FAILURE_STR;
 
 
-#define ERROR_OUT(s,...) fprintf(stderr, "**ERROR DHCLIENT** " s, ##__VA_ARGS__ )
-
-#ifdef DEBUG
-#define DBG_OUT(s,...) fprintf(stderr, "**DEBUG DHCLIENT** " s, ##__VA_ARGS__ )
-#else
-#define DBG_OUT(s,...) {}
-#endif
+#define ERROR_OUT(s,...) GLOG_ERROR( "**ERROR DHCLIENT** " s, ##__VA_ARGS__ )
+#define DBG_OUT(s,...) GLOG_DEBUG( "**DEBUG DHCLIENT** " s, ##__VA_ARGS__ )
 
 #define DHCLIENT_MAX_ERR_STR 1000
 

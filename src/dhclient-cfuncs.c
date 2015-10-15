@@ -54,6 +54,8 @@
 
 #include "dhclient-cfuncs.h"
 #include "overlay-clparse.h"
+#include "grease_client.h"
+#include "nan.h"
 
 TIME default_lease_time = 43200; /* 12 hours... */
 TIME max_lease_time = 86400; /* 24 hours... */
