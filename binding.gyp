@@ -130,13 +130,6 @@
                 "devDependencies" : [
                     "https://github.com/WigWagCo/greaseLog.git#nan"
                 ],
-              "include_dirs": [
-                  "deps/twlib/include",
-                  "deps/isc-dhcp/bind/include",
-                  "deps/isc-dhcp/includes",
-                  "deps/isc-dhcp",
-                  "deps/isc-dhcp/bind/bind-expanded-tar",
-              ],
             },
             "Debug" : {
               	"defines" : [ "linux", "ERRCMN_DEBUG_BUILD", "NODE_ISCDHCP_DEBUG" ],
