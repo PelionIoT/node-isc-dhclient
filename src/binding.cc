@@ -43,28 +43,28 @@ using namespace v8;
 
 
 
-#define V8_IFEXIST_TO_DYN_CSTR(v8field,cfield,val,v8obj) { val = v8obj->Get(String::New(v8field));\
+#define V8_IFEXIST_TO_DYN_CSTR(v8field,cfield,val,v8obj) { val = Nan::Get(v8obj, Nan::New(v8field).ToLocalChecked()).ToLocalChecked();\
 if(!val->IsUndefined() && val->IsString()) {\
 	if(cfield) free(cfield);\
 	v8::String::Utf8Value v8str(val);\
 	cfield = strdup(v8str.operator *()); } }
-#define V8_IFEXIST_SPRINT_CSTR(val, v8obj, v8field, fmt, cstr) { val = v8obj->Get(String::New(v8field));\
+#define V8_IFEXIST_SPRINT_CSTR(val, v8obj, v8field, fmt, cstr) { val = Nan::Get(v8obj, Nan::New(v8field).ToLocalChecked()).ToLocalChecked();\
 if(!val->IsUndefined() && val->IsString()) {\
 	v8::String::Utf8Value v8str(val);\
 	cstr += sprintf(cstr, fmt, v8str.operator *());\
 	} }
-#define V8_IFEXIST_TO_INT_CAST(v8field,cfield,val,v8obj,typ) { val = v8obj->Get(String::New(v8field));\
+#define V8_IFEXIST_TO_INT_CAST(v8field,cfield,val,v8obj,typ) { val = Nan::Get(v8obj, Nan::New(v8field).ToLocalChecked()).ToLocalChecked();\
 		if(!val->IsUndefined() && val->IsNumber()) cfield = (typ) val->ToInteger()->IntegerValue(); }
 
-#define V8_IFEXIST_TO_INT32(v8field,cfield,val,v8obj) { val = v8obj->Get(String::New(v8field));\
+#define V8_IFEXIST_TO_INT32(v8field,cfield,val,v8obj) { val = Nan::Get(v8obj, Nan::New(v8field).ToLocalChecked()).ToLocalChecked();\
 		if(!val->IsUndefined() && val->IsNumber()) cfield = val->ToInteger()->Int32Value(); }
-#define INT32_TO_V8(v8field,cfield,v8obj) v8obj->Set(String::New(v8field),Int32::New(cfield))
-#define CSTR_TO_V8STR(v8field,cstr,v8obj) { if(cstr) v8obj->Set(String::New(v8field),String::New(cstr,strlen(cstr))); }
+#define INT32_TO_V8(v8field,cfield,v8obj) Nan::Set(v8obj, Nan::New(v8field).ToLocalChecked(),Nan::New<Int32>(cfield))
+#define CSTR_TO_V8STR(v8field,cstr,v8obj) { if(cstr) Nan::Set(v8obj,Nan::New(v8field).ToLocalChecked(),Nan::New(cstr,strlen(cstr)).ToLocalChecked()); }
 
 #define MAX_COMMAND_QUEUE 100
 
 
-class NodeDhclient : public node::ObjectWrap {
+class NodeDhclient : public Nan::ObjectWrap {
 public:
 	enum work_code {
 		DISCOVER_REQUEST,
@@ -106,8 +106,8 @@ public:
 		v8_event_code v8code;
 		_errcmn::err_ev err;
 		bool originV8; // are callbacks init-ed?
-		Nan::Callback onCompleteCB;
-		Nan::Callback onFulfillCB;
+		Nan::Callback* onCompleteCB;
+		Nan::Callback* onFulfillCB;
 		Nan::Persistent<Object> buffer; // Buffer object passed in
 		uint32_t uint32t_data;
 		char *_backing;    // backing of the passed in Buffer
@@ -122,7 +122,7 @@ public:
 				cmdcode(c), v8code(UNDEFINED),
 				err(),
 				originV8(true),
-				onCompleteCB(), onFulfillCB(), buffer(),
+				onCompleteCB(NULL), onFulfillCB(NULL), buffer(),
 				_backing(NULL),  len(0), self(i), _reqSize(0),
 				retries(DEFAULT_RETRIES), timeout(TIMEOUT_FOR_RETRY) {
 			switch(c) {
@@ -160,7 +160,7 @@ protected:
 	static void dhcp_thread(void *d);
 	static void dhcp_worker_thread(void *d);
 	bool threadUp;
-	Nan::callback leaseCallback;
+	Nan::Callback* leaseCallback;
 
 	uv_async_t _toV8_async;       // used when me need to make a callback / take action in v8 thread
 	static void toV8_control(uv_async_t *handle, int status /*UNUSED*/);
@@ -223,43 +223,42 @@ public:
     static Nan::Persistent<Function> constructor;
     static Nan::Persistent<ObjectTemplate> prototype;
 
-	NAN_METHOD(SetConfig);
-	NAN_METHOD(GetConfig);
-	NAN_METHOD(SetCurrentLease);
-	NAN_METHOD(Start);
-	NAN_METHOD(Shutdown);
+	static NAN_METHOD(SetConfig);
+	static NAN_METHOD(SetCurrentLease);
+	static NAN_METHOD(GetConfig);
+	static NAN_METHOD(Start);
+	static NAN_METHOD(Shutdown);
 
-	NAN_METHOD(RequestLease);
-	NAN_METHOD(Hibernate);
-	NAN_METHOD(Awaken);
-	NAN_METHOD(Release);
-	NAN_METHOD(SetLeaseCallback);
-	NAN_METHOD(NewClient);
+	static NAN_METHOD(RequestLease);
+	static NAN_METHOD(Hibernate);
+	static NAN_METHOD(Awaken);
+	static NAN_METHOD(Release);
+	static NAN_METHOD(SetLeaseCallback);
+	static NAN_METHOD(NewClient);
 
-	NAN_METHOD(NewInstance) {
-		HandleScope scope;
-		int n = args.Length();
-		Local<Object> instance;
+	// NAN_METHOD(NewInstance) {
+	// 	HandleScope scope;
+	// 	int n = args.Length();
+	// 	Local<Object> instance;
+	//
+	// 	if(args.Length() > 0) {
+	// 		Handle<Value> argv[n];
+	// 		for(int x=0;x<n;x++)
+	// 			argv[x] = args[x];
+	// 		instance = NodeDhclient::constructor->NewInstance(n, argv);
+	// 	} else {
+	// 		instance = NodeDhclient::constructor->NewInstance();
+	// 	}
+	//
+	// 	return scope.Close(instance);
+	// }
+	//
 
-		if(args.Length() > 0) {
-			Handle<Value> argv[n];
-			for(int x=0;x<n;x++)
-				argv[x] = args[x];
-			instance = NodeDhclient::constructor->NewInstance(n, argv);
-		} else {
-			instance = NodeDhclient::constructor->NewInstance();
-		}
-
-		return scope.Close(instance);
-	}
-
-
-	NAN_METHOD(New) {
-		HandleScope scope;
+	static NAN_METHOD(New) {
 
 		NodeDhclient* obj = NULL;
 
-		if (args.IsConstructCall()) {
+		if (info.IsConstructCall()) {
 		    // Invoked as constructor: `new MyObject(...)`
 	//	    double value = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
 	//		if(args.Length() > 0) {
@@ -274,57 +273,59 @@ public:
 	//		} else {
 	//			return ThrowException(Exception::TypeError(String::New("First arg must be a string path.")));
 	//		}
-			obj->Wrap(args.This());
+			obj->Wrap(info.This());
 
 
-			return args.This();
+			info.GetReturnValue().Set(info.This());
 		} else {
 		    // Invoked as plain function `MyObject(...)`, turn into construct call.
 		    const int argc = 1;
-		    Local<Value> argv[argc] = { args[0] };
-		    return scope.Close(constructor->NewInstance(argc, argv));
-		  }
+		    Local<Value> argv[argc] = { info[0] };
+			v8::Local<v8::Function> cons = Nan::New<v8::Function>(constructor);
+	    	info.GetReturnValue().Set(cons->NewInstance(argc,argv));
+		}
 	}
 
 
 
 
-	static void Init() { //Handle<Object> exports) {
+	static void Init()
+	{
 		// Prepare constructor template
-		Local<FunctionTemplate> tpl = FunctionTemplate::New(New);
-		tpl->SetClassName(String::NewSymbol("IscDhclient"));
+		Local<FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(New);
+		tpl->SetClassName(Nan::New("IscDhclient").ToLocalChecked());
 		tpl->InstanceTemplate()->SetInternalFieldCount(1);
 		tpl->PrototypeTemplate()->SetInternalFieldCount(2);
 
 		// Prototype
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("hibernate"), FunctionTemplate::New(Hibernate)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("awaken"), FunctionTemplate::New(Awaken)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("release"), FunctionTemplate::New(Release)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("requestLease"), FunctionTemplate::New(RequestLease)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("_setLeaseCallback"), FunctionTemplate::New(SetLeaseCallback)->GetFunction());
+		Nan::SetPrototypeMethod(tpl,"hibernate",Hibernate);
+		Nan::SetPrototypeMethod(tpl,"awaken",Awaken);
+		Nan::SetPrototypeMethod(tpl,"release",Release);
+		Nan::SetPrototypeMethod(tpl,"requestLease",RequestLease);
+		Nan::SetPrototypeMethod(tpl,"_setLeaseCallback",SetLeaseCallback);
 
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("setCurrentLease"), FunctionTemplate::New(SetCurrentLease)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("setConfig"), FunctionTemplate::New(SetConfig)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("getConfig"), FunctionTemplate::New(GetConfig)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("start"), FunctionTemplate::New(Start)->GetFunction());
-		tpl->PrototypeTemplate()->Set(String::NewSymbol("shutdown"), FunctionTemplate::New(Shutdown)->GetFunction());
+		Nan::SetPrototypeMethod(tpl,"setCurrentLease",SetCurrentLease);
+		Nan::SetPrototypeMethod(tpl,"setConfig",SetConfig);
+		Nan::SetPrototypeMethod(tpl,"getConfig",GetConfig);
+		Nan::SetPrototypeMethod(tpl,"start",Start);
+		Nan::SetPrototypeMethod(tpl,"shutdown",Shutdown);
 
 
-		constructor = Persistent<Function>::New(tpl->GetFunction());
+		constructor.Reset(tpl->GetFunction());
 	}
 
 
 	NodeDhclient() : _config(),
 			dhcp_thread_queue(MAX_COMMAND_QUEUE, false), v8_cmd_queue(MAX_COMMAND_QUEUE, false),
 			_control(), _shutdown(false), _start_cond(), _dhcp_thread(), threadUp(false),
-			leaseCallback(),
+			leaseCallback(NULL),
 			_toV8_async()
 	{
 		init_defaults_config(&_config);
 
 		uv_cond_init(&_start_cond);
 		uv_mutex_init(&_control);
-		uv_async_init(uv_default_loop(), &_toV8_async, toV8_control);
+		uv_async_init(uv_default_loop(), &_toV8_async, reinterpret_cast<uv_async_cb>(toV8_control));
 		// unref it - we don't want this to hold up an exit of node
 		// when the thread is running, it ->Ref() NodeDhclient, and this *should* prevent
 		// node from exiting until the thread shutsdown anyway
@@ -498,9 +499,9 @@ void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
 			DBG_OUT("completing work code = RECORD_NEW_LEASE\n");
 			{
 				// call leaseLog callback
-				if(!dhclient->leaseCallback.IsEmpty()) {
-					argv[0] = String::New(work->_backing,work->len);
-					dhclient->leaseCallback->Call(Context::GetCurrent()->Global(),1,argv);
+				if(!dhclient->leaseCallback->IsEmpty()) {
+					argv[0] = Nan::New(work->_backing,work->len).ToLocalChecked();
+					dhclient->leaseCallback->Call(Nan::GetCurrentContext()->Global(),1,argv);
 				} else {
 					ERROR_OUT("No leaseCallback set! dump: %s\n", work->_backing);
 				}
@@ -512,8 +513,8 @@ void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
 			DBG_OUT("completing work code = GENERAL_ERROR\n");
 			if(work->err.hasErr()) {
 				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+				if(!work->onCompleteCB->IsEmpty())
+					work->onCompleteCB->Call(Nan::GetCurrentContext()->Global(),1,argv);
 			} else {
 				ERROR_OUT("toV8_control saw error - but no error info.");
 			}
@@ -522,36 +523,36 @@ void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
 		case RELEASE_COMPLETE:
 			DBG_OUT("complete\n");
 			if(work->err.hasErr()) {
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,NULL);
+				if(!work->onCompleteCB->IsEmpty())
+					work->onCompleteCB->Call(Nan::GetCurrentContext()->Global(),1,NULL);
 			} else {
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+				if(!work->onCompleteCB->IsEmpty())
+					work->onCompleteCB->Call(Nan::GetCurrentContext()->Global(),0,NULL);
 			}
 			break;
 		case SHUTDOWN_COMPLETE:
 			DBG_OUT("completing work code = SHUTDOWN_COMPLETE\n");
 			if(work->err.hasErr()) {
 				argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+				if(!work->onCompleteCB->IsEmpty())
+					work->onCompleteCB->Call(Nan::GetCurrentContext()->Global(),1,argv);
 			} else {
-				if(!work->onCompleteCB.IsEmpty())
-					work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+				if(!work->onCompleteCB->IsEmpty())
+					work->onCompleteCB->Call(Nan::GetCurrentContext()->Global(),0,NULL);
 			}
 			break;
 		case NEWADDRESS:
 			DBG_OUT("completing work code = NEWADDRESS\n");
-			if(!work->onCompleteCB.IsEmpty()) {
+			if(!work->onCompleteCB->IsEmpty()) {
 				if(work->err.hasErr()) {
 //					argv[1] =  Local<Value>::New(Null());
 					argv[0] = _errcmn::err_ev_to_JS(work->err)->ToObject();
-					if(!work->onCompleteCB.IsEmpty())
-						work->onCompleteCB->Call(Context::GetCurrent()->Global(),1,argv);
+					if(!work->onCompleteCB->IsEmpty())
+						work->onCompleteCB->Call(Nan::GetCurrentContext()->Global(),1,argv);
 				} else {
 					// TODO make object to pass in...
-					if(!work->onCompleteCB.IsEmpty())
-						work->onCompleteCB->Call(Context::GetCurrent()->Global(),0,NULL);
+					if(!work->onCompleteCB->IsEmpty())
+						work->onCompleteCB->Call(Nan::GetCurrentContext()->Global(),0,NULL);
 				}
 			}
 			break;
@@ -617,14 +618,12 @@ int submit_release_complete_to_v8(void) {
 }
 
 NAN_METHOD(NodeDhclient::NewClient) {
-	HandleScope scope;
 
-	return scope.Close(NodeDhclient::NewInstance(args));
-
+	NodeDhclient::New(info);
 }
 
-Persistent<Function> NodeDhclient::constructor;
-Persistent<ObjectTemplate> NodeDhclient::prototype;
+Nan::Persistent<Function> NodeDhclient::constructor;
+Nan::Persistent<ObjectTemplate> NodeDhclient::prototype;
 
 
 //typedef struct dhclient_config_t {
@@ -645,74 +644,66 @@ Persistent<ObjectTemplate> NodeDhclient::prototype;
 //} dhclient_config;
 
 NAN_METHOD(NodeDhclient::Shutdown) {
-	HandleScope scope;
 
-	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* self = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
 	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::SHUTDOWN);
 
 
 	if(!self->isThreadUp()) {
-		if(args.Length() > 0) {
-			 if(args[0]->IsFunction()) {
-					Local<Function>::Cast(args[0])->Call(Context::GetCurrent()->Global(),0,NULL);
+		if(info.Length() > 0) {
+			 if(info[0]->IsFunction()) {
+					Nan::Callback(Local<Function>::Cast(info[0])).Call(Nan::GetCurrentContext()->Global(),0,NULL);
 			 } else
-				 return ThrowException(Exception::TypeError(String::New("bad param: shutdown([function]) -> Need [function]")));
+				 return Nan::ThrowTypeError("bad param: shutdown([function]) -> Need [function]");
 		}
-	} else if(args.Length() > 0) {
-		 if(args[0]->IsFunction())
-				req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+	} else if(info.Length() > 0) {
+		 if(info[0]->IsFunction())
+				req->onCompleteCB = new Nan::Callback(info[0].As<Function>());
 		 else
-			 return ThrowException(Exception::TypeError(String::New("bad param: shutdown([function]) -> Need [function]")));
+			 return Nan::ThrowTypeError("bad param: shutdown([function]) -> Need [function]");
 	}
 	self->dhcp_thread_queue.add(req);
-
-	return scope.Close(Undefined());
 }
 
 /**
  * Blocks until thread is really up.
  */
 NAN_METHOD(NodeDhclient::Start) {
-	HandleScope scope;
 
-	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* obj = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
-	return scope.Close(Boolean::New(obj->setupThread()));
+	info.GetReturnValue().Set(Nan::New<v8::Boolean>(obj->setupThread()));
 }
 
 NAN_METHOD(NodeDhclient::SetLeaseCallback) {
-	HandleScope scope;
 
-	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* obj = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
-	if(args.Length() > 0 && args[0]->IsFunction()) {
-		obj->leaseCallback = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+	if(info.Length() > 0 && info[0]->IsFunction()) {
+		obj->leaseCallback = new Nan::Callback(info[0].As<Function>());
 	} else {
-		 return ThrowException(Exception::TypeError(String::New("bad param: setLeaseCallback([function])")));
+		 return Nan::ThrowTypeError("bad param: setLeaseCallback([function])");
 	}
-
-	return scope.Close(Undefined());
 }
 
 
 NAN_METHOD(NodeDhclient::SetConfig) {
-	HandleScope scope;
 
-	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* obj = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
-	if(args.Length() > 0 && args[0]->IsObject()) {
-		Local<Object> o = args[0]->ToObject();
+	if(info.Length() > 0 && info[0]->IsObject()) {
+		Local<Object> o = info[0]->ToObject();
 		Local<Value> v;
 		V8_IFEXIST_TO_INT_CAST("local_family",obj->_config.local_family,v,o,int);
 		V8_IFEXIST_TO_INT_CAST("local_port",obj->_config.local_port,v,o,int);
 		V8_IFEXIST_TO_DYN_CSTR("server",obj->_config.server,v,o);
-		{ v = o->Get(String::New("interfaces"));
+		{ v = Nan::Get(o, Nan::New("interfaces").ToLocalChecked()).ToLocalChecked();
 			if(!v->IsUndefined() && v->IsArray()) {
 				Handle<Array> a =  v8::Handle<v8::Array>::Cast(v);;
 				int n = a->Length();
 				if(n > DHCLIENT_MAX_INTERFACES) {
-					return ThrowException(Exception::TypeError(String::New("Too many interfaces listed.")));
+					return Nan::ThrowTypeError("Too many interfaces listed.");
 				}
 				for(int x=0;x<DHCLIENT_MAX_INTERFACES;x++) // clear out old interface list
 					if(obj->_config.interfaces[x]) {
@@ -746,21 +737,18 @@ NAN_METHOD(NodeDhclient::SetConfig) {
 		if(obj->_config.config_options) obj->_config.config_options_len = strlen(obj->_config.config_options);
 
 	} else {
-		return ThrowException(Exception::TypeError(String::New("bad param: setConfig([object])")));
+		return Nan::ThrowTypeError("bad param: setConfig([object])");
 	}
-
-	return scope.Close(Undefined());
 }
 
 NAN_METHOD(NodeDhclient::SetCurrentLease) {
-	HandleScope scope;
 
-	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* obj = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
-	if(args.Length() > 0 && args[0]->IsObject()) {
+	if(info.Length() > 0 && info[0]->IsObject()) {
 		char lease[MAX_LEASE_STR_SIZE];
 		memset(&lease,'\0', sizeof(lease));
-		Local<Object> o = args[0]->ToObject();
+		Local<Object> o = info[0]->ToObject();
 		Local<Value> v;
 		char *ls = lease;
 
@@ -769,7 +757,7 @@ NAN_METHOD(NodeDhclient::SetCurrentLease) {
 		V8_IFEXIST_SPRINT_CSTR(v, o, "fixed_address", "  fixed-address %s;\n", ls)
 
 
-		Local<Value> opts_val = o->Get(String::New("options"));
+		Local<Value> opts_val = Nan::Get(o, Nan::New("options").ToLocalChecked()).ToLocalChecked();
 		if(!opts_val->IsUndefined() && opts_val->IsObject()) {
 			Local<Object> opts = opts_val->ToObject();
 			V8_IFEXIST_SPRINT_CSTR(v, opts, "subnet-mask", "  option subnet-mask %s;\n", ls)
@@ -788,21 +776,18 @@ NAN_METHOD(NodeDhclient::SetCurrentLease) {
 		if(obj->_config.initial_leases) free(obj->_config.initial_leases);
 		obj->_config.initial_leases = strdup(lease); // get's freed by
 	} else {
-		return ThrowException(Exception::TypeError(String::New("bad param: SetCurrentLease([object])")));
+		return Nan::ThrowTypeError("bad param: SetCurrentLease([object])");
 	}
-
-	return scope.Close(Undefined());
 }
 
 
 
 
 NAN_METHOD(NodeDhclient::GetConfig) {
-	HandleScope scope;
 
-	NodeDhclient* obj = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* obj = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
-	Local<Object> o = Object::New();
+	Local<Object> o = Nan::New<Object>();
 
 	INT32_TO_V8("local_family",obj->_config.local_family,o);
 	INT32_TO_V8("local_port",obj->_config.local_port,o);
@@ -815,12 +800,12 @@ NAN_METHOD(NodeDhclient::GetConfig) {
 			n++;
 		}
 		if(n > 0) {
-			Local<Object> ar = Array::New(n);
+			Local<Array> ar = Nan::New<v8::Array>(n);
 			for(int x=0;x<n;x++) {
-				ar->Set(x,String::New(obj->_config.interfaces[x],strlen(obj->_config.interfaces[x])));			}
-			o->Set(String::New("interfaces"),ar);
+				Nan::Set(ar, x, Nan::New(obj->_config.interfaces[x],strlen(obj->_config.interfaces[x])).ToLocalChecked());			}
+			Nan::Set(o, Nan::New("interfaces").ToLocalChecked(),ar);
 		} else {
-			o->Set(String::New("interfaces"),Null());
+			Nan::Set(o, Nan::New("interfaces").ToLocalChecked(),Nan::Undefined());
 		}
 	}
 
@@ -835,15 +820,14 @@ NAN_METHOD(NodeDhclient::GetConfig) {
 
 	CSTR_TO_V8STR("config_options",obj->_config.config_options,o);
 
-	return scope.Close(o);
+	info.GetReturnValue().Set(o);
 }
 
 
 
 NAN_METHOD(NodeDhclient::RequestLease) {
-	HandleScope scope;
 
-	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* self = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
 	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::DISCOVER_REQUEST);
 	DBG_OUT("created work: %p\n",req);
@@ -854,29 +838,26 @@ NAN_METHOD(NodeDhclient::RequestLease) {
 		Local<Value> argv[argc];
 		_errcmn::err_ev err;
 		err.setError(DHCLIENT_EXEC_ERROR,"DHCP Thread not started.");
-		argv[0] =  Local<Value>::New(Null());
+		argv[0] =  Nan::Null();
 		argv[1] = _errcmn::err_ev_to_JS(err)->ToObject();
-		if(args[0]->IsFunction())
-			Local<Function>::Cast(args[0])->Call(Context::GetCurrent()->Global(),2,argv);
+		if(info[0]->IsFunction())
+			Nan::Callback(Local<Function>::Cast(info[0])).Call(Nan::GetCurrentContext()->Global(),2,argv);
 		else
 			ERROR_OUT("DHCP Thread not started. No callback provided.");
 	} else {
-		if(args.Length() > 0) {
-			 if(args[0]->IsFunction())
-					req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+		if(info.Length() > 0) {
+			 if(info[0]->IsFunction())
+					req->onCompleteCB = new Nan::Callback(info[0].As<Function>());
 			 else
-				 return ThrowException(Exception::TypeError(String::New("bad param: requestLease([function]) -> Need [function]")));
+				 return Nan::ThrowTypeError("bad param: requestLease([function]) -> Need [function]");
 		}
 		self->dhcp_thread_queue.add(req);
 	}
-
-	return scope.Close(Undefined());
 }
 
 NAN_METHOD(NodeDhclient::Hibernate) {
-	HandleScope scope;
 
-	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* self = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
 	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::HIBERNATE);
 	DBG_OUT("created work: %p\n",req);
@@ -887,29 +868,26 @@ NAN_METHOD(NodeDhclient::Hibernate) {
 		Local<Value> argv[argc];
 		_errcmn::err_ev err;
 		err.setError(DHCLIENT_EXEC_ERROR,"DHCP Thread not started.");
-		argv[0] =  Local<Value>::New(Null());
+		argv[0] =  Nan::Null();
 		argv[1] = _errcmn::err_ev_to_JS(err)->ToObject();
-		if(args[0]->IsFunction())
-			Local<Function>::Cast(args[0])->Call(Context::GetCurrent()->Global(),2,argv);
+		if(info[0]->IsFunction())
+			Nan::Callback(Local<Function>::Cast(info[0])).Call(Nan::GetCurrentContext()->Global(),2,argv);
 		else
 			ERROR_OUT("DHCP Thread not started. No callback provided.");
 	} else {
-		if(args.Length() > 0) {
-			 if(args[0]->IsFunction())
-					req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+		if(info.Length() > 0) {
+			 if(info[0]->IsFunction())
+					req->onCompleteCB = new Nan::Callback(info[0].As<Function>());
 			 else
-				 return ThrowException(Exception::TypeError(String::New("bad param: Hibernate([function]) -> Need [function]")));
+				 return Nan::ThrowTypeError("bad param: Hibernate([function]) -> Need [function]");
 		}
 		self->dhcp_thread_queue.add(req);
 	}
-
-	return scope.Close(Undefined());
 }
 
 NAN_METHOD(NodeDhclient::Awaken) {
-	HandleScope scope;
 
-	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* self = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
 	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::AWAKEN);
 	DBG_OUT("created work: %p\n",req);
@@ -920,27 +898,25 @@ NAN_METHOD(NodeDhclient::Awaken) {
 		Local<Value> argv[argc];
 		_errcmn::err_ev err;
 		err.setError(DHCLIENT_EXEC_ERROR,"DHCP Thread not started.");
-		argv[0] =  Local<Value>::New(Null());
+		argv[0] =  Nan::Undefined();
 		argv[1] = _errcmn::err_ev_to_JS(err)->ToObject();
-		if(args[0]->IsFunction())
-			Local<Function>::Cast(args[0])->Call(Context::GetCurrent()->Global(),2,argv);
+		if(info[0]->IsFunction())
+			Nan::Callback(Local<Function>::Cast(info[0])).Call(Nan::GetCurrentContext()->Global(),2,argv);
 		else
 			ERROR_OUT("DHCP Thread not started. No callback provided.");
 	} else {
-		if(args.Length() > 0) {
-			 if(args[0]->IsFunction())
-					req->onCompleteCB = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+		if(info.Length() > 0) {
+			 if(info[0]->IsFunction())
+			 	req->onCompleteCB = new Nan::Callback(info[0].As<Function>());
 			 else
-				 return ThrowException(Exception::TypeError(String::New("bad param: awaken([function]) -> Need [function]")));
+				 return Nan::ThrowTypeError("bad param: awaken([function]) -> Need [function]");
 		}
 		self->dhcp_thread_queue.add(req);
 	}
-
-	return scope.Close(Undefined());
 }
 
 NAN_METHOD(NodeDhclient::Release) {
-	NodeDhclient* self = ObjectWrap::Unwrap<NodeDhclient>(args.This());
+	NodeDhclient* self = Nan::ObjectWrap::Unwrap<NodeDhclient>(info.This());
 
 	NodeDhclient::workReq *req = new NodeDhclient::workReq(self,NodeDhclient::work_code::RELEASE);
 	DBG_OUT("created work: %p\n",req);
@@ -950,23 +926,21 @@ NAN_METHOD(NodeDhclient::Release) {
 		Local<Value> argv[argc];
 		_errcmn::err_ev err;
 		err.setError(DHCLIENT_EXEC_ERROR,"DHCP Thread not started.");
-		argv[0] =  Local<Value>::New(Null());
+		argv[0] =  Nan::Null();
 		argv[1] = _errcmn::err_ev_to_JS(err)->ToObject();
 		if(info[0]->IsFunction())
-			Local<Function>::Cast(info[0])->Call(Context::GetCurrent()->Global(),2,argv);
+			Nan::Callback(Local<Function>::Cast(info[0])).Call(Nan::GetCurrentContext()->Global(),2,argv);
 		else
 			ERROR_OUT("DHCP Thread not started. No callback provided.");
 	} else {
 		if(info.Length() > 0) {
 			 if(info[0]->IsFunction())
-					req->onCompleteCB = new Nan::Callback(info[0].As<Function>()));
+			 	req->onCompleteCB = new Nan::Callback(info[0].As<Function>());
 			 else
-				 return ThrowTypeException("bad param: release([function]) -> Need [function]");
+				 return Nan::ThrowTypeError("bad param: release([function]) -> Need [function]");
 		}
 		self->dhcp_thread_queue.add(req);
 	}
-
-	info.GetReturnValue().Set(Undefined());
 }
 
 

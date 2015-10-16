@@ -5,32 +5,30 @@
   "author": "Ed Hemphill <ed@wigwag.com>",
   "main": "index.js",
   "repository": {
-  "type": "git",
-  "url": "https://github.com/WigWagCo/node-isc-dhclient"
-},
+    "type": "git",
+    "url": "https://github.com/WigWagCo/node-isc-dhclient"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "preinstall" : "deps/install-deps.sh && node-gyp rebuild"
+    "preinstall": "deps/install-deps.sh && node-gyp rebuild"
   },
   "bugs": {
-  "url": "https://github.com/WigWagCo/node-isc-dhclient/issues"
-},
-  "keywords": [
-  "network",
-  "dhcp", "dhcpv6"
-],
-  "binary": {
+    "url": "https://github.com/WigWagCo/node-isc-dhclient/issues"
   },
+  "keywords": [
+    "network",
+    "dhcp",
+    "dhcpv6"
+  ],
+  "binary": {},
   "dependencies": {
+    "nan": "^2.1.0",
     "netkit": "git://github.com/WigWagCo/node-netkit#master"
   },
-  "devDependencies": {
-  },
-  "bundledDependencies":[],
+  "devDependencies": {},
+  "bundledDependencies": [],
   "preferGlobal": true,
   "private": true,
   "license": "MIT",
   "gypfile": true
-
 }
-  

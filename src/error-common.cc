@@ -7,25 +7,7 @@
  */
 
 
-// ensure we get the XSI compliant strerror_r():
-// see: http://man7.org/linux/man-pages/man3/strerror.3.html
-
-#ifdef _POSIX_C_SOURCE
-#undef _POSIX_C_SOURCE
-#endif
-#define _POSIX_C_SOURCE 200112L
-
-#ifdef _GNU_SOURCE
-#undef _GNU_SOURCE
-#endif
-
-
 #include "error-common.h"
-
-// ensure we get the XSI compliant strerror_r():
-// see: http://man7.org/linux/man-pages/man3/strerror.3.html
-
-
 
 #include <string.h>
 
@@ -390,9 +372,9 @@ _ERRCMN_DEFINE_CONSTANT_WREV(target, EXDEV);
 	char *get_error_str(int _errno) {
 		char *ret = NULL;
 		if(_errno < _ERR_CUSTOM_ERROR_CUTOFF) {
-			ret = (char *) malloc(max_error_buf);
-			int r = strerror_r(_errno,ret,max_error_buf);
-			if ( r != 0 ) DBG_OUT("strerror_r bad return: %d\n",r);
+			char *buf = (char *) malloc(max_error_buf);
+			char *ret = strerror_r(_errno,buf,max_error_buf);
+			if ( ret == NULL ) DBG_OUT("strerror_r bad return\n");
 		} else {
 			char *s = get_custom_err_str(_errno);
 			ret = strdup(s);
@@ -416,7 +398,7 @@ _ERRCMN_DEFINE_CONSTANT_WREV(target, EXDEV);
 	}
 
 	v8::Local<v8::Value> errno_to_JS(int _errno, const char *prefix) {
-		v8::Local<v8::Object> retobj = v8::Object::New();
+		v8::Local<v8::Object> retobj = Nan::New<v8::Object>();
 		bool custom = false;
 		if(_errno) {
 			char *temp = NULL;
@@ -425,7 +407,7 @@ _ERRCMN_DEFINE_CONSTANT_WREV(target, EXDEV);
 				errstr = get_error_str(_errno);
 			} else {
 				errstr = get_custom_err_str(_errno);
-				retobj->Set(v8::String::New("message"), v8::String::New(errstr));
+				Nan::Set(retobj, Nan::New("message").ToLocalChecked(), Nan::New(errstr).ToLocalChecked());
 			}
 			if(errstr) {
 				if(prefix) {
@@ -437,13 +419,13 @@ _ERRCMN_DEFINE_CONSTANT_WREV(target, EXDEV);
 				} else {
 					temp = errstr;
 				}
-				retobj->Set(v8::String::New("message"), v8::String::New(temp));
+				Nan::Set(retobj, Nan::New("message").ToLocalChecked(), Nan::New<v8::String>(temp).ToLocalChecked());
 				if(!custom) free_error_str(errstr);
 				if(prefix) {
 					free(temp);
 				}
 			}
-			retobj->Set(v8::String::New("errno"), v8::Integer::New(_errno));
+			Nan::Set(retobj, Nan::New("errno").ToLocalChecked(), Nan::New<v8::Integer>(_errno));
 		}
 		return retobj;
 	}
@@ -470,7 +452,7 @@ _ERRCMN_DEFINE_CONSTANT_WREV(target, EXDEV);
 					} else {
 						temp = errstr;
 					}
-					retobj = v8::Exception::Error(v8::String::New(temp));
+					retobj = v8::Exception::Error(Nan::New<v8::String>(temp).ToLocalChecked());
 
 					if(!custom) {
 						free_error_str(errstr);
@@ -480,18 +462,17 @@ _ERRCMN_DEFINE_CONSTANT_WREV(target, EXDEV);
 					}
 
 			} else
-				retobj = v8::Exception::Error(v8::String::New("Error"));
+				retobj = v8::Exception::Error(Nan::New("Error").ToLocalChecked());
 
-			retobj->ToObject()->Set(v8::String::New("errno"), v8::Integer::New(_errno));
+			Nan::Set(retobj->ToObject(), Nan::New("errno").ToLocalChecked(), Nan::New<v8::Integer>(_errno));
 		}
 		return retobj;
 	}
 
 
 	v8::Handle<v8::Value> err_ev_to_JS(err_ev &e, const char *prefix) {
-			v8::HandleScope scope;
 		//		v8::Local<v8::Object> retobj = v8::Object::New();
-			v8::Local<v8::Value> retobj = v8::Local<v8::Primitive>::New(v8::Undefined());
+			v8::Local<v8::Value> retobj = Nan::New<v8::Primitive>(Nan::Undefined());
 
 			if(e.hasErr()) {
 				char *temp = NULL;
@@ -505,14 +486,12 @@ _ERRCMN_DEFINE_CONSTANT_WREV(target, EXDEV);
 						strcat(temp, e.errstr);
 					} else
 						strcpy(temp, e.errstr);
-					retobj = v8::Exception::Error(v8::String::New(temp));
+					retobj = v8::Exception::Error(Nan::New(temp).ToLocalChecked());
 					free(temp);
 				}
-				else retobj = v8::Exception::Error(v8::String::New("Error"));
-				retobj->ToObject()->Set(v8::String::New("errno"), v8::Integer::New(e._errno));
+				else retobj = v8::Exception::Error(Nan::New("Error").ToLocalChecked());
+				Nan::Set(retobj->ToObject(), Nan::New("errno").ToLocalChecked(), Nan::New<v8::Integer>(e._errno));
 			}
-			return scope.Close(retobj);
+			return retobj;
 		}
-
 }
-

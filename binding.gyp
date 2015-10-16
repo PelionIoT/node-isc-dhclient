@@ -89,7 +89,7 @@
           "deps/isc-dhcp/includes",
           "deps/isc-dhcp",
           "deps/isc-dhcp/bind/bind-expanded-tar",
-          ""
+          "<!(node -e \"require('nan')\")"
       ],
 
       "cflags": [
@@ -141,7 +141,7 @@
             		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive"
 		        ],
                 "devDependencies" : [
-                    "grease-log": "git://github.com/WigWagCo/greaseLog#nan"
+                    "https://github.com/WigWagCo/greaseLog.git#nan"
                 ]
             }
           }

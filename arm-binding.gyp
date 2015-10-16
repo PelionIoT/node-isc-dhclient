@@ -10,7 +10,7 @@
         "./src/overlay-errwarn.c",
         "./src/overlay-clparse.c",
         "./src/overlay-parse.c",
-        
+
 
 # common/libdhcp.a see Makefile.am
 #		alloc.c bpf.c comapi.c conflex.c ctrace.c discover.c \
@@ -18,10 +18,10 @@
 #		    icmp.c inet.c lpf.c memory.c nit.c ns_name.c options.c \
 #		    packet.c parse.c print.c raw.c resolv.c socket.c \
 #		    tables.c tr.c tree.c upf.c
-#		
+#
 
 		"./deps/isc-dhcp/client/dhc6.c",
-#		"./deps/isc-dhcp/client/clparse.c",		
+#		"./deps/isc-dhcp/client/clparse.c",
 		"./deps/isc-dhcp/common/alloc.c",
 		"./deps/isc-dhcp/common/bpf.c",
 		"./deps/isc-dhcp/common/comapi.c",
@@ -79,7 +79,7 @@
 		"./deps/isc-dhcp/omapip/trace.c",
 		"./deps/isc-dhcp/omapip/toisc.c",
 		"./deps/isc-dhcp/omapip/iscprint.c",
-		"./deps/isc-dhcp/omapip/isclib.c",	
+		"./deps/isc-dhcp/omapip/isclib.c",
 
       ],
 
@@ -87,7 +87,8 @@
           "deps/twlib/include",
           "deps/isc-dhcp/bind/include",
           "deps/isc-dhcp/includes",
-          "deps/isc-dhcp"
+          "deps/isc-dhcp",
+          "<!(node -e \"require('nan')\")"
       ],
 
       "cflags": [
@@ -106,15 +107,15 @@
 # these two provide heavy debugging for the semaphore / queing stuff
 #        "-DDEBUG_TW_CIRCULAR_H",
 #        "-D_TW_SEMA2_HEAVY_DEBUG",
-        
+
         # out of config.h or site.h
 #        "-DNSUPDATE"
-        
+
 
       ],
 
       "conditions": [
-        [ 
+        [
           "OS=='linux'", {
           "doit" : '<!(deps/install-deps.sh 2>&1 > install_deps.log)',  # doit means nothing - but this forces this script execute
           "configurations" : {
@@ -123,9 +124,9 @@
            		"ldflags" : [
             		"-L../deps/isc-dhcp/bind/lib",
             		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build
-#            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive" 
-            		"-Wl,-whole-archive ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libdns.a ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libisc.a -Wl,-no-whole-archive" 
-#            		"-Wl,-whole-archive -ldns -lisc -Wl,-no-whole-archive" 
+#            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive"
+            		"-Wl,-whole-archive ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libdns.a ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libisc.a -Wl,-no-whole-archive"
+#            		"-Wl,-whole-archive -ldns -lisc -Wl,-no-whole-archive"
 		        ]
             },
             "Debug" : {
@@ -136,14 +137,14 @@
            		"ldflags" : [
             		"-L../deps/isc-dhcp/bind/lib",
             		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build
-#            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive" 
-            		"-Wl,-whole-archive ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libdns.a ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libisc.a -Wl,-no-whole-archive" 
-#            		"-Wl,-whole-archive -ldns -lisc -Wl,-no-whole-archive" 
+#            		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive"
+            		"-Wl,-whole-archive ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libdns.a ../deps/isc-dhcp/dhcp-4.3.0b1/bind/lib/libisc.a -Wl,-no-whole-archive"
+#            		"-Wl,-whole-archive -ldns -lisc -Wl,-no-whole-archive"
 		        ]
             }
           }
           }
-        ],        
+        ],
         [
           "OS=='mac'", {
             "xcode_settings": {
@@ -156,7 +157,7 @@
         ]
       ]
     }
-    
+
 #    ,
 #    {
 #      "target_name": "action_after_build",
