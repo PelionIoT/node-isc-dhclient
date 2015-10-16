@@ -126,7 +126,17 @@
             		"-L../deps/isc-dhcp/bind/lib",
             		## education: http://stackoverflow.com/questions/14889941/link-a-static-library-to-a-shared-one-during-build
             		"-Wl,-whole-archive ../deps/isc-dhcp/bind/lib/libdns.a ../deps/isc-dhcp/bind/lib/libisc.a -Wl,-no-whole-archive"
-		        ]
+		        ],
+                "devDependencies" : [
+                    "https://github.com/WigWagCo/greaseLog.git#nan"
+                ],
+              "include_dirs": [
+                  "deps/twlib/include",
+                  "deps/isc-dhcp/bind/include",
+                  "deps/isc-dhcp/includes",
+                  "deps/isc-dhcp",
+                  "deps/isc-dhcp/bind/bind-expanded-tar",
+              ],
             },
             "Debug" : {
               	"defines" : [ "linux", "ERRCMN_DEBUG_BUILD", "NODE_ISCDHCP_DEBUG" ],
