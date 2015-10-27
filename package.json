@@ -22,7 +22,7 @@
   ],
   "binary": {},
   "dependencies": {
-    "nan": "^2.1.0",
+    "nan": "*",
     "netkit": "git://github.com/WigWagCo/node-netkit#nan"
   },
   "devDependencies": {},
