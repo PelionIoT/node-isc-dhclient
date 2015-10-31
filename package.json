@@ -23,7 +23,7 @@
   "binary": {},
   "dependencies": {
     "nan": "*",
-    "netkit": "git://github.com/WigWagCo/node-netkit#nan"
+    "netkit": "git://github.com/WigWagCo/node-netkit#master"
   },
   "devDependencies": {},
   "bundledDependencies": [],
