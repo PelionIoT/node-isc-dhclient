@@ -8,10 +8,6 @@
     "type": "git",
     "url": "https://github.com/WigWagCo/node-isc-dhclient"
   },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "preinstall": "deps/install-deps.sh && node-gyp rebuild"
-  },
   "bugs": {
     "url": "https://github.com/WigWagCo/node-isc-dhclient/issues"
   },
