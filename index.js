@@ -1,3 +1,5 @@
+'use strict';
+
 var util = require('util');
 
 var binding = null;
@@ -23,7 +25,7 @@ module.exports.newClient = function() {
   o.setLeaseCallback = function(cb) {
     return o._setLeaseCallback(function(lease) {
   //    console.log("Got lease: " + lease);
-      lease = lease.replace(/\\n/g, "\\n")  
+      lease = lease.replace(/\\n/g, "\\n")
                    .replace(/\\'/g, "\\'")
                    .replace(/\\"/g, '\\"')
                    .replace(/\\&/g, "\\&")
@@ -32,13 +34,13 @@ module.exports.newClient = function() {
                    .replace(/\\b/g, "\\b")
                    .replace(/\\f/g, "\\f");
     // remove non-printable and other non-valid JSON chars
-      lease = lease.replace(/[\u0000-\u0019]+/g,""); 
+      lease = lease.replace(/[\u0000-\u0019]+/g,"");
       var obj = null;
       try {
         obj = JSON.parse(lease);
         // console.log("valid json:");
         // console.dir(obj);
-      } catch(e) {  
+      } catch(e) {
         console.error("Invalid JSON in lease: " + util.inspect(e));
         cb(null);
       }
@@ -46,7 +48,7 @@ module.exports.newClient = function() {
         cb(obj);
       }
     });
-  }
+  };
 
   return o;
-}
+};
