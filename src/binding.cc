@@ -506,7 +506,6 @@ void NodeDhclient::toV8_control(uv_async_t *handle, int status /*UNUSED*/) {
 				// call leaseLog callback
 				if(!dhclient->leaseCallback->IsEmpty()) {
 					argv[0] = Nan::New<v8::String>(work->_backing,work->len).ToLocalChecked();
-					DBG_OUT("BOBBY!!!!!!!!!    ");
 					dhclient->leaseCallback->Call(Nan::GetCurrentContext()->Global(),1,argv);
 				} else {
 					ERROR_OUT("No leaseCallback set! dump: %s\n", work->_backing);
