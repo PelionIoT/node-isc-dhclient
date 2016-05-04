@@ -11,7 +11,8 @@ console.dir(client.__proto__);
 var conf = client.getConfig();
 
 conf.interfaces = [];
-conf.interfaces.push("enp0s25");
+conf.interfaces.push("wlp3s0");
+//conf.interfaces.push("enp0s25");
 // config_options is essentially the same as dhclient.conf
 // note - using a '\n' will not work here... use a literal new line as below.
 
@@ -37,7 +38,7 @@ client.setLeaseCallback(function(lease) {
 
 client.start();
 
-var lease = { interface: 'enp0s25',
+var lease = { interface: 'eth0',
   fixed_address: '10.0.0.8',
   options:
    { 'subnet-mask': '255.255.254.0',
@@ -49,19 +50,44 @@ var lease = { interface: 'enp0s25',
   renew: '1 2015/08/10 04:49:45;',
   rebind: '1 2015/08/10 15:08:44;',
   expire: '1 2015/08/10 18:08:44;' };
-client.setCurrentLease(lease);
+//client.setCurrentLease(lease);
 
 client.requestLease(function(err,results){
 	console.log("in callback:");
+
 	if(err) {
 		console.log("Err: " + util.inspect(err));
 	} else {
 		console.log("Success: " + util.inspect(results));
-	}
-	client.shutdown(function(err){
-		if(err)
-			console.log("Err on shutdown: " + util.inspect(err));
-		else
-			console.log("dhclient shutdown complete.");
-	});
+   	}
 });
+
+setTimeout(function(){
+
+        client.shutdown(function(err){
+            if(err) {
+                console.log("Err on shutdown: " + util.inspect(err));
+            } else {
+                console.log("dhclient shutdown complete.");
+
+                // conf = client.getConfig();
+                conf.interfaces.push("enp0s25");
+
+                console.dir(conf);
+                client = DHCP.newClient();
+                client.setConfig(conf);
+
+                client.start();
+                // console.log("Client restarted");
+                client.requestLease(function(err,results){
+                    console.log("in callback:");
+                    if(err) {
+                        console.log("Err: " + util.inspect(err));
+                    } else {
+                        console.log("Success: " + util.inspect(results));
+                    }
+                });
+            }
+        });
+
+}, 10000);

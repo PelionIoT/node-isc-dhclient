@@ -202,6 +202,7 @@ protected:
 	void sigThreadDown() {
 		uv_mutex_lock(&_control);
 		threadUp = false;
+		uv_thread_join(&this->_dhcp_thread);
 		uv_cond_signal(&_start_cond);
 		uv_mutex_unlock(&_control);
 		uv_unref((uv_handle_t *) &_toV8_async);
@@ -387,9 +388,10 @@ void NodeDhclient::dhcp_thread(void *d) {
 			switch(work->cmdcode) {
 			case SHUTDOWN:
 				DBG_OUT("have work: %p code: SHUTDOWN\n",work, work->cmdcode);
-				shutdown = true;
 				shutdown_cmd = work;
 				shutdown_cmd->v8code = SHUTDOWN_COMPLETE;
+				ret = do_dhclient_shutdown(&errstr, &self->_config);
+				if(!ret) shutdown = true;
 				break;
 			case DISCOVER_REQUEST:
 				DBG_OUT("have work: %p code: DISCOVER_REQUEST\n",work, work->cmdcode);
@@ -710,11 +712,12 @@ NAN_METHOD(NodeDhclient::SetConfig) {
 				if(n > DHCLIENT_MAX_INTERFACES) {
 					return Nan::ThrowTypeError("Too many interfaces listed.");
 				}
-				for(int x=0;x<DHCLIENT_MAX_INTERFACES;x++) // clear out old interface list
+				for(int x=0;x<DHCLIENT_MAX_INTERFACES;x++) { // clear out old interface list
 					if(obj->_config.interfaces[x]) {
 						free(obj->_config.interfaces[x]);
 						obj->_config.interfaces[x] = NULL;
 					}
+				}
 				for(int x=0;x<n;x++) {
 					{ 	Local<Value> s;
 						s = a->Get(x);

@@ -167,6 +167,13 @@ int do_dhclient_awaken(char **err, dhclient_config *config)
 	return ret;
 }
 
+int do_dhclient_shutdown(char **err, dhclient_config *config)
+{
+	isc_result_t ret =  dhcp_set_control_state (server_shutdown, server_awaken);
+	return ret;
+}
+
+
 int do_dhclient_release(char **err, dhclient_config *config)
 {
 	struct interface_info *ip;
@@ -257,6 +264,7 @@ int do_dhclient_request(char **err, dhclient_config *config)
 	dhcp_interface_discovery_hook = dhclient_interface_discovery_hook;
 	dhcp_interface_shutdown_hook = dhclient_interface_shutdown_hook;
 	dhcp_interface_startup_hook = dhclient_interface_startup_hook;
+	dhcp_interface_shutdown_hook = dhclient_interface_shutdown_hook;
 
 //	for (i = 1; i < argc; i++) {
 //		if (!strcmp(argv[i], "-r")) {

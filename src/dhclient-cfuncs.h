@@ -152,6 +152,7 @@ extern int do_dhclient_request(char **errstr, dhclient_config *config);
 extern int do_dhclient_hibernate(char **errstr, dhclient_config *config);
 extern int do_dhclient_awaken(char **errstr, dhclient_config *config);
 extern int do_dhclient_release(char **errstr, dhclient_config *config);
+extern int do_dhclient_shutdown(char **errstr, dhclient_config *config);
 
 extern int submit_lease_to_v8(char *json);
 extern int submit_hibernate_complete_to_v8(void);
