@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-      "target_name": "isc_dhclient",
+      "target_name": "isc-dhclient",
 
       "sources": [
       	"./src/binding.cc",
