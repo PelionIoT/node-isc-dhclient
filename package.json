@@ -23,8 +23,6 @@
   },
   "devDependencies": {},
   "bundledDependencies": [],
-  "preferGlobal": true,
   "private": true,
-  "license": "MIT",
-  "gypfile": true
+  "license": "MIT"
 }
